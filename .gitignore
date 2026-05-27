@@ -1,0 +1,12 @@
+linux-7.0/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# VS Code C/C++ browse database files are large generated artifacts.
+**/.vscode/BROWSE.VC.DB
+**/.vscode/BROWSE.VC.DB-*
+
+# Generated analysis bundles used during manual validation.
+*_source_bundle.c
+test/fixtures/*.c

@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+import io
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+
+from src.linux_meta_query import (
+    analyze_function,
+    export_source_bundle,
+    print_function_call_sequence,
+    print_function_param_constraints,
+)
+
+
+class LinuxMetaQuerySmokeTest(unittest.TestCase):
+    def test_analyze_function_finds_vfs_read(self) -> None:
+        report = analyze_function(
+            "vfs_read",
+            file_filter=r"fs\read_write.c",
+            max_deps=2,
+            max_snippet_lines=3,
+        )
+        self.assertEqual(report["selected"]["name"], "vfs_read")
+        self.assertIn("vfs_read", report["source"])
+
+    def test_export_source_bundle_includes_nested_types(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "vfs_read_bundle.c"
+            export_source_bundle(
+                "vfs_read",
+                output=output,
+                file_filter=r"fs\read_write.c",
+                max_deps=20,
+                max_snippet_lines=6,
+                max_nesting_depth=2,
+            )
+            text = output.read_text(encoding="utf-8")
+        self.assertIn("struct file", text)
+        self.assertIn("struct file_operations", text)
+        self.assertIn("vfs_read", text)
+
+    def test_call_chain_prints_upstream_path(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            print_function_call_sequence(
+                "can_send",
+                file_filter=r"net\can\af_can.c",
+                max_depth=2,
+                max_chains=5,
+                max_callers_per_level=10,
+            )
+        text = stdout.getvalue()
+        self.assertIn("Target: can_send", text)
+        self.assertIn("-> can_send", text)
+
+    def test_param_constraints_prints_user_pointer(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            print_function_param_constraints(
+                "vfs_read",
+                file_filter=r"fs\read_write.c",
+                max_deps=2,
+                max_snippet_lines=3,
+            )
+        text = stdout.getvalue()
+        self.assertIn("Parameter: buf", text)
+        self.assertIn("__user", text)
+
+
+if __name__ == "__main__":
+    unittest.main()
