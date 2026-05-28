@@ -1,7 +1,7 @@
 # linux_meta_query.py 用法和验证案例
 
 `linux_meta_query.py` 读取 VS Code C/C++ 插件生成的
-`BROWSE.VC.DB`，按函数名查询 Linux 源码元数据，并提供 3 个独立接口。
+`BROWSE.VC.DB`，按函数名查询 Linux 源码元数据，并提供 4 个独立接口。
 
 当前仓库默认 Linux 源码目录：
 
@@ -15,7 +15,75 @@ linux-7.0
 linux-7.0/.vscode/BROWSE.VC.DB
 ```
 
-## 三个功能接口
+## 代码结构
+
+当前实现已拆分为可扩展的包结构：
+
+```text
+src/linux_meta_query.py      兼容 CLI 入口和 Python API re-export
+src/linux_meta/base.py       命令基类和通用配置
+src/linux_meta/models.py     SQLite 元数据模型和常量
+src/linux_meta/db.py         SQLite 访问和函数定位
+src/linux_meta/parsing.py    源码切片、清洗和 token 提取
+src/linux_meta/dependencies.py
+                             宏/类型/变量依赖收集和嵌套类型展开
+src/linux_meta/calls.py      调用点解析、上游/下游调用图搜索
+src/linux_meta/params.py     入参约束推断
+src/linux_meta/engine.py     公共分析报告聚合
+src/linux_meta/source_bundle.py
+src/linux_meta/call_chains.py
+src/linux_meta/param_constraints.py
+src/linux_meta/subfunction_bundle.py
+src/linux_meta/renderer.py
+src/linux_meta/cli.py
+```
+
+四个功能分别拆在独立模块中，后续新增知识库构建能力时，优先新增新的 command
+模块并复用 `LinuxMetaCommand` 基类。
+
+## 查看终端帮助
+
+主帮助会直接打印所有通用配置项、子命令专用配置项和常用示例：
+
+```powershell
+python .\src\linux_meta_query.py --help
+```
+
+查看某个功能接口的完整参数和默认值：
+
+```powershell
+python .\src\linux_meta_query.py source --help
+python .\src\linux_meta_query.py subsource --help
+python .\src\linux_meta_query.py calls --help
+python .\src\linux_meta_query.py params --help
+python .\src\linux_meta_query.py report --help
+```
+
+`--help` 中重点配置项包括：
+
+```text
+--repo PATH
+  Linux 源码根目录，默认 linux-7.0。
+
+--db PATH
+  元数据库选择器。可以直接传 BROWSE.VC.DB 文件、.vscode 目录，
+  或包含 .vscode/BROWSE.VC.DB 的源码根目录。
+
+--file TEXT
+  源文件路径子串，用来在同名函数中选择目标定义。
+
+--max-deps N
+  每类依赖最多采集多少项。普通功能默认 20，source 默认 200，
+  subsource 默认 500。
+
+--max-candidates N
+  同名函数候选最多检查多少项，默认 12。
+
+--max-snippet-lines N
+  每个依赖源码片段最多输出多少行，默认 80。
+```
+
+## 四个功能接口
 
 脚本同时支持命令行接口和 Python import 接口。命令行接口如下。
 
@@ -24,13 +92,13 @@ linux-7.0/.vscode/BROWSE.VC.DB
 输入函数名，输出函数源码，以及源码涉及的结构体、typedef、枚举/枚举值、常量/宏、全局变量、静态变量等代码片段，合并为一个 `.c` 文件。对于结构体、union、enum、typedef 中继续引用的嵌套类型，脚本会递归解析并一并写入 `.c` 文件。
 
 ```powershell
-python .\tools\linux_meta_query.py source vfs_read --file fs\read_write.c --output .\tools\vfs_read_bundle.c
+python .\src\linux_meta_query.py source vfs_read --file fs\read_write.c --output .\vfs_read_bundle.c
 ```
 
 递归深度默认是 4 层，可以调整：
 
 ```powershell
-python .\tools\linux_meta_query.py source vfs_read --file fs\read_write.c --max-nesting-depth 6
+python .\src\linux_meta_query.py source vfs_read --file fs\read_write.c --max-nesting-depth 6
 ```
 
 如果不指定 `--output`，默认输出：
@@ -42,7 +110,7 @@ python .\tools\linux_meta_query.py source vfs_read --file fs\read_write.c --max-
 例如：
 
 ```powershell
-python .\tools\linux_meta_query.py source do_sys_openat2 --file fs\open.c
+python .\src\linux_meta_query.py source do_sys_openat2 --file fs\open.c
 ```
 
 会生成：
@@ -53,12 +121,52 @@ do_sys_openat2_source_bundle.c
 
 生成的 `.c` 文件是分析包，便于阅读和后续处理，不保证能直接作为 Linux 编译单元编译。
 
-### 2. calls：输出上层调用链路
+### 2. subsource：输出目标函数及下游子函数源码分析包
+
+输入函数名，递归解析目标函数调用到的下游子函数，输出目标函数、子函数源码，
+以及这些源码共同涉及的结构体、typedef、枚举/枚举值、常量/宏、全局变量、
+静态变量等代码片段，并合并为一个 `.c` 文件。
+
+```powershell
+python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max-depth 1 --output .\vfs_read_subfunctions_bundle.c
+```
+
+输出文件会按如下顺序组织，减少先引用后定义的情况：
+
+```text
+常量/宏 -> typedef -> 枚举/枚举值 -> 全局变量 -> 静态变量 -> 结构体/union -> 子函数/目标函数
+```
+
+函数体部分会尽量按“被调用者在前，调用者在后”排序。结构体、union、enum、typedef
+中的嵌套类型会递归解析并一并写入 `.c` 文件。
+
+常用限制参数：
+
+```powershell
+python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max-depth 2 --max-functions 50 --max-nesting-depth 4
+```
+
+`subsource` 目前解析普通直接函数调用。对于函数指针调用和成员调用，例如
+`file->f_op->read()`，脚本会保留原函数源码，但不会强行解析到某个全局函数实现。
+
+默认情况下，`subsource` 会跳过日志、trace、debug、统计/accounting、
+instrumentation 等辅助子函数，避免把不影响核心逻辑的函数也展开进分析包。
+例如 `vfs_read` 中的 `add_rchar()`、`inc_syscr()` 会保留在 `vfs_read`
+源码里，但不会额外展开它们的函数体。生成文件会在 `Skipped auxiliary callees`
+段落中记录跳过项。
+
+如果需要完整保留这些辅助函数源码，可加：
+
+```powershell
+python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --include-auxiliary-calls
+```
+
+### 3. calls：输出上层调用链路
 
 输入函数名，递归查找“哪些上层函数调用了目标函数”，并用 `a -> b -> 目标函数` 的形式在命令行打印完整链路。
 
 ```powershell
-python .\tools\linux_meta_query.py calls vfs_read --file fs\read_write.c --max-depth 3
+python .\src\linux_meta_query.py calls vfs_read --file fs\read_write.c --max-depth 3
 ```
 
 输出示例：
@@ -69,12 +177,12 @@ Target: vfs_read (LINUX-7.0\FS\READ_WRITE.C:554-583)
    SYSCALL_DEFINE3@LINUX-7.0\FS\READ_WRITE.C:726 | ksys_read@LINUX-7.0\FS\READ_WRITE.C:717
 ```
 
-### 3. params：输出函数入参约束和格式
+### 4. params：输出函数入参约束和格式
 
 输入函数名，根据函数上下文在命令行打印入参类型、格式、约束和证据行。
 
 ```powershell
-python .\tools\linux_meta_query.py params vfs_read --file fs\read_write.c
+python .\src\linux_meta_query.py params vfs_read --file fs\read_write.c
 ```
 
 输出示例：
@@ -95,28 +203,29 @@ Evidence:
 旧用法仍然保留，会自动走 `report`：
 
 ```powershell
-python .\tools\linux_meta_query.py vfs_read --file fs\read_write.c
+python .\src\linux_meta_query.py vfs_read --file fs\read_write.c
 ```
 
 等价于：
 
 ```powershell
-python .\tools\linux_meta_query.py report vfs_read --file fs\read_write.c
+python .\src\linux_meta_query.py report vfs_read --file fs\read_write.c
 ```
 
 完整报告也支持 JSON：
 
 ```powershell
-python .\tools\linux_meta_query.py report vfs_read --file fs\read_write.c --format json
+python .\src\linux_meta_query.py report vfs_read --file fs\read_write.c --format json
 ```
 
 ## Python API 用法
 
-也可以在其他 Python 脚本中直接 import 三个接口：
+也可以在其他 Python 脚本中直接 import 四个接口：
 
 ```python
 from src.linux_meta_query import (
     export_source_bundle,
+    export_subfunction_source_bundle,
     print_function_call_sequence,
     print_function_param_constraints,
 )
@@ -125,6 +234,15 @@ export_source_bundle(
     "vfs_read",
     output="vfs_read_bundle.c",
     file_filter=r"fs\read_write.c",
+    max_nesting_depth=4,
+)
+
+export_subfunction_source_bundle(
+    "vfs_read",
+    output="vfs_read_subfunctions_bundle.c",
+    file_filter=r"fs\read_write.c",
+    max_depth=1,
+    max_functions=20,
     max_nesting_depth=4,
 )
 
@@ -142,6 +260,13 @@ print_function_param_constraints(
 
 ## 通用参数
 
+这些参数也会直接显示在终端帮助中：
+
+```powershell
+python .\src\linux_meta_query.py --help
+python .\src\linux_meta_query.py source --help
+```
+
 `function`
 : 必填，待查询函数名，例如 `vfs_read`、`start_kernel`、`do_sys_openat2`。
 
@@ -154,16 +279,16 @@ print_function_param_constraints(
 示例：
 
 ```powershell
-python .\tools\linux_meta_query.py calls can_send --db .\linux-7.0\.vscode\BROWSE.VC.DB --file net\can\af_can.c
-python .\tools\linux_meta_query.py calls can_send --db .\linux-7.0\.vscode --file net\can\af_can.c
-python .\tools\linux_meta_query.py calls can_send --db .\linux-7.0 --file net\can\af_can.c
+python .\src\linux_meta_query.py calls can_send --db .\linux-7.0\.vscode\BROWSE.VC.DB --file net\can\af_can.c
+python .\src\linux_meta_query.py calls can_send --db .\linux-7.0\.vscode --file net\can\af_can.c
+python .\src\linux_meta_query.py calls can_send --db .\linux-7.0 --file net\can\af_can.c
 ```
 
 `--file`
 : 源文件路径子串，用来在同名函数中选择目标定义，例如 `fs\read_write.c`。
 
 `--max-deps`
-: 每类依赖最多输出多少项。`calls`、`params`、`report` 默认 `20`；`source` 默认 `200`，用于容纳递归嵌套类型。
+: 每类依赖最多输出多少项。`calls`、`params`、`report` 默认 `20`；`source` 默认 `200`；`subsource` 默认 `500`，用于容纳多个子函数的合并依赖。
 
 `--max-candidates`
 : 同名函数候选最多保留多少项，默认 `12`。
@@ -172,13 +297,19 @@ python .\tools\linux_meta_query.py calls can_send --db .\linux-7.0 --file net\ca
 : 结构体、宏、变量等依赖项的源码片段最多输出多少行，默认 `80`。
 
 `--max-depth`
-: 仅 `calls` 子命令使用，控制向上追溯调用者的最大层数，默认 `5`。
+: `calls` 中控制向上追溯调用者的最大层数，默认 `5`；`subsource` 中控制向下递归解析子函数的最大层数，默认 `3`。
 
 `--max-chains`
 : 仅 `calls` 子命令使用，控制最多打印多少条调用链，默认 `200`。
 
 `--max-callers-per-level`
 : 仅 `calls` 子命令使用，控制每个函数名最多展开多少个直接调用者，默认 `80`。
+
+`--max-functions`
+: 仅 `subsource` 子命令使用，控制最多合并多少个函数源码，默认 `200`。
+
+`--include-auxiliary-calls`
+: 仅 `subsource` 子命令使用。默认不展开日志、trace、debug、统计/accounting、instrumentation 等辅助子函数；加上该选项后会把这些函数也纳入输出。
 
 `calls` 性能说明
 : 调用链分析会按层批量搜索待查函数名。遇到 `can_send` 这类上游调用链较多的函数时，可用 `--max-depth`、`--max-chains`、`--max-callers-per-level` 控制输出规模。
@@ -187,7 +318,24 @@ python .\tools\linux_meta_query.py calls can_send --db .\linux-7.0 --file net\ca
 : 完整报告中的内部调用序列可用该选项跳过大写宏风格调用。
 
 `--max-nesting-depth`
-: 仅 `source` 子命令使用，控制结构体/union/enum/typedef 递归解析层数，默认 `4`。
+: `source` 和 `subsource` 子命令使用，控制结构体/union/enum/typedef 递归解析层数，默认 `4`。
+
+## 子命令专用参数速查
+
+`source`
+: 导出 `.c` 分析包。常用参数是 `--output/-o`、`--max-nesting-depth`、`--max-deps`、`--max-snippet-lines`。
+
+`subsource`
+: 导出目标函数和下游子函数 `.c` 分析包。常用参数是 `--output/-o`、`--max-depth`、`--max-functions`、`--max-nesting-depth`、`--max-deps`、`--include-auxiliary-calls`。
+
+`calls`
+: 打印上层调用链。常用参数是 `--max-depth`、`--max-chains`、`--max-callers-per-level`。
+
+`params`
+: 打印入参约束。通常需要结合 `--file` 定位目标函数。
+
+`report`
+: 打印完整报告。支持 `--format markdown|json` 和 `--no-macros`。
 
 ## 实际验证案例
 
@@ -196,7 +344,7 @@ python .\tools\linux_meta_query.py calls can_send --db .\linux-7.0 --file net\ca
 命令：
 
 ```powershell
-python .\tools\linux_meta_query.py source vfs_read --file fs\read_write.c --max-deps 4 --max-snippet-lines 8 --output .\test\fixtures\vfs_read_bundle_test.c
+python .\src\linux_meta_query.py source vfs_read --file fs\read_write.c --max-deps 4 --max-snippet-lines 8 --output .\test\fixtures\vfs_read_bundle_test.c
 ```
 
 验证结果：
@@ -238,12 +386,46 @@ Nested structures:
   struct path
 ```
 
+### 案例 1.1：vfs_read 生成子函数 .c 分析包
+
+命令：
+
+```powershell
+python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max-depth 1 --max-functions 20 --max-deps 20 --max-snippet-lines 20 --output .\test\fixtures\vfs_read_subfunctions_bundle_test.c
+```
+
+验证结果：
+
+```text
+Wrote subfunction source bundle: test\fixtures\vfs_read_subfunctions_bundle_test.c
+```
+
+生成文件包含：
+
+```text
+Root function:
+  vfs_read
+
+Function bodies:
+  rw_verify_area
+  new_sync_read
+  fsnotify_access
+  vfs_read
+
+Ordering:
+  子函数源码位于 vfs_read 之前，依赖片段位于所有函数源码之前。
+
+Skipped auxiliary callees:
+  add_rchar
+  inc_syscr
+```
+
 ### 案例 2：vfs_read 输出上层调用链路
 
 命令：
 
 ```powershell
-python .\tools\linux_meta_query.py calls vfs_read --file fs\read_write.c --max-depth 3 --max-chains 20 --max-callers-per-level 20
+python .\src\linux_meta_query.py calls vfs_read --file fs\read_write.c --max-depth 3 --max-chains 20 --max-callers-per-level 20
 ```
 
 ### 案例 2.1：can_send 上层调用链路性能验证
@@ -251,7 +433,7 @@ python .\tools\linux_meta_query.py calls vfs_read --file fs\read_write.c --max-d
 命令：
 
 ```powershell
-python .\tools\linux_meta_query.py calls can_send --file net\can\af_can.c
+python .\src\linux_meta_query.py calls can_send --file net\can\af_can.c
 ```
 
 验证结果摘要：
@@ -268,7 +450,7 @@ Target: can_send (LINUX-7.0\NET\CAN\AF_CAN.C:202-300)
 该案例用于验证上游链路较多时不会卡死。需要缩小输出时可执行：
 
 ```powershell
-python .\tools\linux_meta_query.py calls can_send --file net\can\af_can.c --max-depth 3 --max-chains 30 --max-callers-per-level 30
+python .\src\linux_meta_query.py calls can_send --file net\can\af_can.c --max-depth 3 --max-chains 30 --max-callers-per-level 30
 ```
 
 验证结果摘要：
@@ -285,7 +467,7 @@ python .\tools\linux_meta_query.py calls can_send --file net\can\af_can.c --max-
 命令：
 
 ```powershell
-python .\tools\linux_meta_query.py params vfs_read --file fs\read_write.c
+python .\src\linux_meta_query.py params vfs_read --file fs\read_write.c
 ```
 
 验证结果摘要：
@@ -313,7 +495,7 @@ pos:
 命令：
 
 ```powershell
-python .\tools\linux_meta_query.py calls start_kernel --file init\main.c --max-depth 3
+python .\src\linux_meta_query.py calls start_kernel --file init\main.c --max-depth 3
 ```
 
 验证点：
@@ -332,9 +514,9 @@ python .\tools\linux_meta_query.py calls start_kernel --file init\main.c --max-d
 命令：
 
 ```powershell
-python .\tools\linux_meta_query.py source do_sys_openat2 --file fs\open.c --max-deps 8 --max-snippet-lines 12
-python .\tools\linux_meta_query.py calls do_sys_openat2 --file fs\open.c
-python .\tools\linux_meta_query.py params do_sys_openat2 --file fs\open.c
+python .\src\linux_meta_query.py source do_sys_openat2 --file fs\open.c --max-deps 8 --max-snippet-lines 12
+python .\src\linux_meta_query.py calls do_sys_openat2 --file fs\open.c
+python .\src\linux_meta_query.py params do_sys_openat2 --file fs\open.c
 ```
 
 验证结果摘要：

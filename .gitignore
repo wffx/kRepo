@@ -1,12 +1,39 @@
+# Local Linux source trees and generated metadata databases
+linux-*/
 linux-7.0/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-
-# VS Code C/C++ browse database files are large generated artifacts.
 **/.vscode/BROWSE.VC.DB
 **/.vscode/BROWSE.VC.DB-*
+**/.vscode/*.db
+**/.vscode/*.DB
+**/.vscode/*.sqlite
+**/.vscode/*.sqlite3
 
-# Generated analysis bundles used during manual validation.
+# Python bytecode and local test caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local environment files
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Generated source-analysis bundles and smoke-test artifacts
 *_source_bundle.c
-test/fixtures/*.c
+*_bundle.c
+test/fixtures/
+
+# Editor and OS noise
+.vscode/
+!.vscode/settings.example.json
+.idea/
+.DS_Store
+Thumbs.db

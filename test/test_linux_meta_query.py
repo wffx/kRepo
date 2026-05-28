@@ -9,6 +9,7 @@ from pathlib import Path
 from src.linux_meta_query import (
     analyze_function,
     export_source_bundle,
+    export_subfunction_source_bundle,
     print_function_call_sequence,
     print_function_param_constraints,
 )
@@ -54,6 +55,27 @@ class LinuxMetaQuerySmokeTest(unittest.TestCase):
         text = stdout.getvalue()
         self.assertIn("Target: can_send", text)
         self.assertIn("-> can_send", text)
+
+    def test_export_subfunction_bundle_includes_child_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "vfs_read_subfunctions_bundle.c"
+            export_subfunction_source_bundle(
+                "vfs_read",
+                output=output,
+                file_filter=r"fs\read_write.c",
+                max_depth=1,
+                max_functions=5,
+                max_deps=10,
+                max_snippet_lines=12,
+                max_nesting_depth=1,
+            )
+            text = output.read_text(encoding="utf-8")
+        self.assertIn("Function sources: callees before callers", text)
+        self.assertIn("rw_verify_area", text)
+        self.assertIn("vfs_read", text)
+        self.assertIn("Skipped auxiliary callees", text)
+        self.assertNotRegex(text, r"/\* \[\d+\] add_rchar")
+        self.assertNotRegex(text, r"/\* \[\d+\] inc_syscr")
 
     def test_param_constraints_prints_user_pointer(self) -> None:
         stdout = io.StringIO()
