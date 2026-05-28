@@ -1,1 +1,1 @@
-"""Smoke tests for the Linux metadata query tooling."""
+"""Smoke tests for the C/C++ metadata query tooling."""

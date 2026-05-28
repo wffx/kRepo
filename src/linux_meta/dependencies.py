@@ -296,3 +296,4 @@ def item_to_dict(item: CodeItem, max_snippet_lines: int) -> dict[str, object]:
     except OSError as exc:
         data["snippet_error"] = str(exc)
     return data
+

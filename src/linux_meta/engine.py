@@ -44,7 +44,7 @@ from .parsing import (
 def analyze_report(
     function: str,
     *,
-    repo: str = "linux-7.0",
+    repo: str = ".",
     db: str | None = None,
     file_filter: str | None = None,
     include_macros: bool = True,
@@ -59,7 +59,7 @@ def analyze_report(
     try:
         candidates = find_functions(con, function, file_filter)
         if not candidates:
-            raise SystemExit(f"?????: {function}")
+            raise SystemExit(f"Function not found: {function}")
         function_item = candidates[0]
         params = function_params(con, function_item.id)
         source = source_slice(function_item)
@@ -84,9 +84,10 @@ def analyze_report(
             "calls": [asdict(call) for call in calls],
             "param_constraints": [asdict(r) for r in infer_param_constraints(function_item, params, source)],
             "notes": [
-                "BROWSE.VC.DB ? symbols/symbol_refs/symbol_relations ????????????????????",
-                "???????????????????? --file ????????",
+                "BROWSE.VC.DB may not contain complete symbol relation tables; calls and constraints use source heuristics.",
+                "When functions share the same name, use --file to narrow the source path.",
             ],
         }
     finally:
         con.close()
+

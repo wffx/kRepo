@@ -1,4 +1,4 @@
-"""Linux metadata query package."""
+"""C/C++ metadata query package."""
 
 from .source_bundle import analyze_function, export_source_bundle
 from .call_chains import print_function_call_sequence
@@ -12,3 +12,4 @@ __all__ = [
     "print_function_param_constraints",
     "export_subfunction_source_bundle",
 ]
+

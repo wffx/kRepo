@@ -54,7 +54,7 @@ def resolve_repo_and_db(repo_arg: str | Path, db_arg: str | Path | None) -> tupl
     if not db_path.exists():
         raise SystemExit(f"SQLite DB not found: {db_path}")
     if not repo.exists():
-        raise SystemExit(f"Source repo root not found: {repo}")
+        raise SystemExit(f"Source root not found: {repo}")
     return repo, db_path
 
 
@@ -158,3 +158,4 @@ def find_enclosing_function(con: sqlite3.Connection, file_path: str, line: int) 
     if not rows:
         return None
     return row_to_item(rows[0])
+

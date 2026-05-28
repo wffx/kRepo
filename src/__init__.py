@@ -1,1 +1,1 @@
-"""Core modules for the Linux metadata query tooling."""
+"""Core modules for the C/C++ metadata query tooling."""

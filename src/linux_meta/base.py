@@ -9,7 +9,7 @@ from .engine import CodeItem, find_functions, open_db, resolve_repo_and_db
 
 @dataclass
 class QueryOptions:
-    repo: str | Path = "linux-7.0"
+    repo: str | Path = "."
     db: str | Path | None = None
     file_filter: str | None = None
     include_macros: bool = True
@@ -18,8 +18,8 @@ class QueryOptions:
     max_snippet_lines: int = 80
 
 
-class LinuxMetaCommand:
-    """Shared repository, database, and function-selection behavior for commands."""
+class CppMetaCommand:
+    """Shared source tree, database, and function-selection behavior for commands."""
 
     def __init__(self, options: QueryOptions | None = None) -> None:
         self.options = options or QueryOptions()
@@ -33,3 +33,7 @@ class LinuxMetaCommand:
         if not candidates:
             raise SystemExit(f"未找到函数: {function}")
         return candidates[0], candidates[1 : self.options.max_candidates]
+
+
+LinuxMetaCommand = CppMetaCommand
+

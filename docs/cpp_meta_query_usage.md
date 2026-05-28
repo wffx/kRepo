@@ -1,26 +1,30 @@
-# linux_meta_query.py 用法和验证案例
+# cpp_meta_query.py 通用 C/C++ 工程用法和验证案例
 
-`linux_meta_query.py` 读取 VS Code C/C++ 插件生成的
-`BROWSE.VC.DB`，按函数名查询 Linux 源码元数据，并提供 4 个独立接口。
+`cpp_meta_query.py` 读取 VS Code C/C++ 插件生成的
+`BROWSE.VC.DB`，按函数名查询 C/C++ 工程源码元数据，并提供 4 个独立接口。
 
-当前仓库默认 Linux 源码目录：
+默认源码根目录：
 
 ```text
-linux-7.0
+.
 ```
 
 默认数据库路径：
 
 ```text
-linux-7.0/.vscode/BROWSE.VC.DB
+./.vscode/BROWSE.VC.DB
 ```
+
+如果待分析工程不在当前目录，可通过 `--repo` 或 `--db` 指定。
 
 ## 代码结构
 
 当前实现已拆分为可扩展的包结构：
 
 ```text
-src/linux_meta_query.py      兼容 CLI 入口和 Python API re-export
+src/cpp_meta_query.py      兼容 CLI 入口和 Python API re-export
+src/linux_meta_query.py    历史兼容入口，功能等同于 cpp_meta_query.py
+src/cpp_meta/__init__.py   通用 C/C++ Python API re-export
 src/linux_meta/base.py       命令基类和通用配置
 src/linux_meta/models.py     SQLite 元数据模型和常量
 src/linux_meta/db.py         SQLite 访问和函数定位
@@ -39,31 +43,35 @@ src/linux_meta/cli.py
 ```
 
 四个功能分别拆在独立模块中，后续新增知识库构建能力时，优先新增新的 command
-模块并复用 `LinuxMetaCommand` 基类。
+模块并复用 `CppMetaCommand` 基类。
+
+`src/linux_meta` 是早期面向 Linux 验证样例时留下的历史包名；当前实现已经按通用
+C/C++ 工程使用方式组织，新增代码建议通过 `src.cpp_meta_query` 或 `src.cpp_meta`
+导入公共接口。
 
 ## 查看终端帮助
 
 主帮助会直接打印所有通用配置项、子命令专用配置项和常用示例：
 
 ```powershell
-python .\src\linux_meta_query.py --help
+python .\src\cpp_meta_query.py --help
 ```
 
 查看某个功能接口的完整参数和默认值：
 
 ```powershell
-python .\src\linux_meta_query.py source --help
-python .\src\linux_meta_query.py subsource --help
-python .\src\linux_meta_query.py calls --help
-python .\src\linux_meta_query.py params --help
-python .\src\linux_meta_query.py report --help
+python .\src\cpp_meta_query.py source --help
+python .\src\cpp_meta_query.py subsource --help
+python .\src\cpp_meta_query.py calls --help
+python .\src\cpp_meta_query.py params --help
+python .\src\cpp_meta_query.py report --help
 ```
 
 `--help` 中重点配置项包括：
 
 ```text
 --repo PATH
-  Linux 源码根目录，默认 linux-7.0。
+  C/C++ 源码根目录，默认当前目录 `.`。
 
 --db PATH
   元数据库选择器。可以直接传 BROWSE.VC.DB 文件、.vscode 目录，
@@ -92,13 +100,13 @@ python .\src\linux_meta_query.py report --help
 输入函数名，输出函数源码，以及源码涉及的结构体、typedef、枚举/枚举值、常量/宏、全局变量、静态变量等代码片段，合并为一个 `.c` 文件。对于结构体、union、enum、typedef 中继续引用的嵌套类型，脚本会递归解析并一并写入 `.c` 文件。
 
 ```powershell
-python .\src\linux_meta_query.py source vfs_read --file fs\read_write.c --output .\vfs_read_bundle.c
+python .\src\cpp_meta_query.py source parse_config --repo .\my_project --file src\config.c --output .\parse_config_bundle.c
 ```
 
 递归深度默认是 4 层，可以调整：
 
 ```powershell
-python .\src\linux_meta_query.py source vfs_read --file fs\read_write.c --max-nesting-depth 6
+python .\src\cpp_meta_query.py source parse_config --repo .\my_project --file src\config.c --max-nesting-depth 6
 ```
 
 如果不指定 `--output`，默认输出：
@@ -110,16 +118,16 @@ python .\src\linux_meta_query.py source vfs_read --file fs\read_write.c --max-ne
 例如：
 
 ```powershell
-python .\src\linux_meta_query.py source do_sys_openat2 --file fs\open.c
+python .\src\cpp_meta_query.py source parse_config --repo .\my_project --file src\config.c
 ```
 
 会生成：
 
 ```text
-do_sys_openat2_source_bundle.c
+parse_config_source_bundle.c
 ```
 
-生成的 `.c` 文件是分析包，便于阅读和后续处理，不保证能直接作为 Linux 编译单元编译。
+生成的 `.c` 文件是分析包，便于阅读和后续处理，不保证能直接作为独立 C/C++ 编译单元编译。
 
 ### 2. subsource：输出目标函数及下游子函数源码分析包
 
@@ -128,7 +136,7 @@ do_sys_openat2_source_bundle.c
 静态变量等代码片段，并合并为一个 `.c` 文件。
 
 ```powershell
-python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max-depth 1 --output .\vfs_read_subfunctions_bundle.c
+python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file src\config.c --max-depth 1 --output .\parse_config_subfunctions_bundle.c
 ```
 
 输出文件会按如下顺序组织，减少先引用后定义的情况：
@@ -143,7 +151,7 @@ python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max
 常用限制参数：
 
 ```powershell
-python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max-depth 2 --max-functions 50 --max-nesting-depth 4
+python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file src\config.c --max-depth 2 --max-functions 50 --max-nesting-depth 4
 ```
 
 `subsource` 目前解析普通直接函数调用。对于函数指针调用和成员调用，例如
@@ -151,14 +159,14 @@ python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max
 
 默认情况下，`subsource` 会跳过日志、trace、debug、统计/accounting、
 instrumentation 等辅助子函数，避免把不影响核心逻辑的函数也展开进分析包。
-例如 `vfs_read` 中的 `add_rchar()`、`inc_syscr()` 会保留在 `vfs_read`
+例如统计计数或日志函数会保留在原函数
 源码里，但不会额外展开它们的函数体。生成文件会在 `Skipped auxiliary callees`
 段落中记录跳过项。
 
 如果需要完整保留这些辅助函数源码，可加：
 
 ```powershell
-python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --include-auxiliary-calls
+python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file src\config.c --include-auxiliary-calls
 ```
 
 ### 3. calls：输出上层调用链路
@@ -166,15 +174,15 @@ python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --inc
 输入函数名，递归查找“哪些上层函数调用了目标函数”，并用 `a -> b -> 目标函数` 的形式在命令行打印完整链路。
 
 ```powershell
-python .\src\linux_meta_query.py calls vfs_read --file fs\read_write.c --max-depth 3
+python .\src\cpp_meta_query.py calls parse_config --repo .\my_project --file src\config.c --max-depth 3
 ```
 
 输出示例：
 
 ```text
-Target: vfs_read (LINUX-7.0\FS\READ_WRITE.C:554-583)
-1. SYSCALL_DEFINE3 -> ksys_read -> vfs_read
-   SYSCALL_DEFINE3@LINUX-7.0\FS\READ_WRITE.C:726 | ksys_read@LINUX-7.0\FS\READ_WRITE.C:717
+Target: parse_config (MY_PROJECT\SRC\CONFIG.C:120-180)
+1. load_config -> parse_config
+   load_config@MY_PROJECT\SRC\CONFIG.C:210
 ```
 
 ### 4. params：输出函数入参约束和格式
@@ -182,7 +190,7 @@ Target: vfs_read (LINUX-7.0\FS\READ_WRITE.C:554-583)
 输入函数名，根据函数上下文在命令行打印入参类型、格式、约束和证据行。
 
 ```powershell
-python .\src\linux_meta_query.py params vfs_read --file fs\read_write.c
+python .\src\cpp_meta_query.py params parse_config --repo .\my_project --file src\config.c
 ```
 
 输出示例：
@@ -203,19 +211,19 @@ Evidence:
 旧用法仍然保留，会自动走 `report`：
 
 ```powershell
-python .\src\linux_meta_query.py vfs_read --file fs\read_write.c
+python .\src\cpp_meta_query.py parse_config --repo .\my_project --file src\config.c
 ```
 
 等价于：
 
 ```powershell
-python .\src\linux_meta_query.py report vfs_read --file fs\read_write.c
+python .\src\cpp_meta_query.py report parse_config --repo .\my_project --file src\config.c
 ```
 
 完整报告也支持 JSON：
 
 ```powershell
-python .\src\linux_meta_query.py report vfs_read --file fs\read_write.c --format json
+python .\src\cpp_meta_query.py report parse_config --repo .\my_project --file src\config.c --format json
 ```
 
 ## Python API 用法
@@ -223,7 +231,7 @@ python .\src\linux_meta_query.py report vfs_read --file fs\read_write.c --format
 也可以在其他 Python 脚本中直接 import 四个接口：
 
 ```python
-from src.linux_meta_query import (
+from src.cpp_meta_query import (
     export_source_bundle,
     export_subfunction_source_bundle,
     print_function_call_sequence,
@@ -231,30 +239,34 @@ from src.linux_meta_query import (
 )
 
 export_source_bundle(
-    "vfs_read",
-    output="vfs_read_bundle.c",
-    file_filter=r"fs\read_write.c",
+    "parse_config",
+    output="parse_config_bundle.c",
+    repo=r".\my_project",
+    file_filter=r"src\config.c",
     max_nesting_depth=4,
 )
 
 export_subfunction_source_bundle(
-    "vfs_read",
-    output="vfs_read_subfunctions_bundle.c",
-    file_filter=r"fs\read_write.c",
+    "parse_config",
+    output="parse_config_subfunctions_bundle.c",
+    repo=r".\my_project",
+    file_filter=r"src\config.c",
     max_depth=1,
     max_functions=20,
     max_nesting_depth=4,
 )
 
 print_function_call_sequence(
-    "vfs_read",
-    file_filter=r"fs\read_write.c",
+    "parse_config",
+    repo=r".\my_project",
+    file_filter=r"src\config.c",
     max_depth=3,
 )
 
 print_function_param_constraints(
-    "vfs_read",
-    file_filter=r"fs\read_write.c",
+    "parse_config",
+    repo=r".\my_project",
+    file_filter=r"src\config.c",
 )
 ```
 
@@ -263,15 +275,15 @@ print_function_param_constraints(
 这些参数也会直接显示在终端帮助中：
 
 ```powershell
-python .\src\linux_meta_query.py --help
-python .\src\linux_meta_query.py source --help
+python .\src\cpp_meta_query.py --help
+python .\src\cpp_meta_query.py source --help
 ```
 
 `function`
-: 必填，待查询函数名，例如 `vfs_read`、`start_kernel`、`do_sys_openat2`。
+: 必填，待查询函数名，例如 `parse_config`、`decode_packet`、`vfs_read`。
 
 `--repo`
-: Linux 源码根目录，默认 `linux-7.0`。
+: C/C++ 源码根目录，默认当前目录 `.`。
 
 `--db`
 : SQLite 元数据库路径。支持直接传 `BROWSE.VC.DB` 文件、包含该文件的 `.vscode` 目录，或包含 `.vscode/BROWSE.VC.DB` 的源码根目录。指定 DB 后脚本会尽量自动推断源码根目录。
@@ -279,13 +291,13 @@ python .\src\linux_meta_query.py source --help
 示例：
 
 ```powershell
-python .\src\linux_meta_query.py calls can_send --db .\linux-7.0\.vscode\BROWSE.VC.DB --file net\can\af_can.c
-python .\src\linux_meta_query.py calls can_send --db .\linux-7.0\.vscode --file net\can\af_can.c
-python .\src\linux_meta_query.py calls can_send --db .\linux-7.0 --file net\can\af_can.c
+python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode\BROWSE.VC.DB --file src\config.c
+python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode --file src\config.c
+python .\src\cpp_meta_query.py calls parse_config --db .\my_project --file src\config.c
 ```
 
 `--file`
-: 源文件路径子串，用来在同名函数中选择目标定义，例如 `fs\read_write.c`。
+: 源文件路径子串，用来在同名函数中选择目标定义，例如 `src\config.c`。
 
 `--max-deps`
 : 每类依赖最多输出多少项。`calls`、`params`、`report` 默认 `20`；`source` 默认 `200`；`subsource` 默认 `500`，用于容纳多个子函数的合并依赖。
@@ -337,14 +349,18 @@ python .\src\linux_meta_query.py calls can_send --db .\linux-7.0 --file net\can\
 `report`
 : 打印完整报告。支持 `--format markdown|json` 和 `--no-macros`。
 
-## 实际验证案例
+## Linux 大型 C 工程验证案例
+
+下面案例使用本地 `linux-7.0` 源码树验证工具在大型 C 工程上的行为。Linux
+只是验证样例，不是工具的适用范围限制。运行这些案例时需要显式指定
+`--repo .\linux-7.0`，或通过 `--db` 指向对应的 `BROWSE.VC.DB`。
 
 ### 案例 1：vfs_read 生成 .c 分析包
 
 命令：
 
 ```powershell
-python .\src\linux_meta_query.py source vfs_read --file fs\read_write.c --max-deps 4 --max-snippet-lines 8 --output .\test\fixtures\vfs_read_bundle_test.c
+python .\src\cpp_meta_query.py source vfs_read --repo .\linux-7.0 --file fs\read_write.c --max-deps 4 --max-snippet-lines 8 --output .\test\fixtures\vfs_read_bundle_test.c
 ```
 
 验证结果：
@@ -391,7 +407,7 @@ Nested structures:
 命令：
 
 ```powershell
-python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max-depth 1 --max-functions 20 --max-deps 20 --max-snippet-lines 20 --output .\test\fixtures\vfs_read_subfunctions_bundle_test.c
+python .\src\cpp_meta_query.py subsource vfs_read --repo .\linux-7.0 --file fs\read_write.c --max-depth 1 --max-functions 20 --max-deps 20 --max-snippet-lines 20 --output .\test\fixtures\vfs_read_subfunctions_bundle_test.c
 ```
 
 验证结果：
@@ -425,7 +441,7 @@ Skipped auxiliary callees:
 命令：
 
 ```powershell
-python .\src\linux_meta_query.py calls vfs_read --file fs\read_write.c --max-depth 3 --max-chains 20 --max-callers-per-level 20
+python .\src\cpp_meta_query.py calls vfs_read --repo .\linux-7.0 --file fs\read_write.c --max-depth 3 --max-chains 20 --max-callers-per-level 20
 ```
 
 ### 案例 2.1：can_send 上层调用链路性能验证
@@ -433,7 +449,7 @@ python .\src\linux_meta_query.py calls vfs_read --file fs\read_write.c --max-dep
 命令：
 
 ```powershell
-python .\src\linux_meta_query.py calls can_send --file net\can\af_can.c
+python .\src\cpp_meta_query.py calls can_send --repo .\linux-7.0 --file net\can\af_can.c
 ```
 
 验证结果摘要：
@@ -450,7 +466,7 @@ Target: can_send (LINUX-7.0\NET\CAN\AF_CAN.C:202-300)
 该案例用于验证上游链路较多时不会卡死。需要缩小输出时可执行：
 
 ```powershell
-python .\src\linux_meta_query.py calls can_send --file net\can\af_can.c --max-depth 3 --max-chains 30 --max-callers-per-level 30
+python .\src\cpp_meta_query.py calls can_send --repo .\linux-7.0 --file net\can\af_can.c --max-depth 3 --max-chains 30 --max-callers-per-level 30
 ```
 
 验证结果摘要：
@@ -467,7 +483,7 @@ python .\src\linux_meta_query.py calls can_send --file net\can\af_can.c --max-de
 命令：
 
 ```powershell
-python .\src\linux_meta_query.py params vfs_read --file fs\read_write.c
+python .\src\cpp_meta_query.py params vfs_read --repo .\linux-7.0 --file fs\read_write.c
 ```
 
 验证结果摘要：
@@ -495,7 +511,7 @@ pos:
 命令：
 
 ```powershell
-python .\src\linux_meta_query.py calls start_kernel --file init\main.c --max-depth 3
+python .\src\cpp_meta_query.py calls start_kernel --repo .\linux-7.0 --file init\main.c --max-depth 3
 ```
 
 验证点：
@@ -514,9 +530,9 @@ python .\src\linux_meta_query.py calls start_kernel --file init\main.c --max-dep
 命令：
 
 ```powershell
-python .\src\linux_meta_query.py source do_sys_openat2 --file fs\open.c --max-deps 8 --max-snippet-lines 12
-python .\src\linux_meta_query.py calls do_sys_openat2 --file fs\open.c
-python .\src\linux_meta_query.py params do_sys_openat2 --file fs\open.c
+python .\src\cpp_meta_query.py source do_sys_openat2 --repo .\linux-7.0 --file fs\open.c --max-deps 8 --max-snippet-lines 12
+python .\src\cpp_meta_query.py calls do_sys_openat2 --repo .\linux-7.0 --file fs\open.c
+python .\src\cpp_meta_query.py params do_sys_openat2 --repo .\linux-7.0 --file fs\open.c
 ```
 
 验证结果摘要：
@@ -556,6 +572,7 @@ python .\src\linux_meta_query.py params do_sys_openat2 --file fs\open.c
 1. 用 `code_items` 和 `files` 从 SQLite 中定位函数、参数、结构体、宏、变量等定义。
 2. 读取函数源码，用启发式规则提取直接调用和入参约束。
 3. 对函数指针调用，例如 `file->f_op->read()`，保留调用表达式但不强行解析到某个全局函数。
-4. 对同名函数，建议使用 `--file` 指定路径子串，避免命中声明、架构实现或 `tools/` 测试代码。
+4. 对同名函数，建议使用 `--file` 指定路径子串，避免命中声明、平台实现或测试代码。
 
 如果后续数据库能生成 `symbol_refs` 或 `symbol_relations`，脚本可以扩展为更精确的调用图分析。
+

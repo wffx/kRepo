@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
-from .base import LinuxMetaCommand, QueryOptions
+from .base import CppMetaCommand, QueryOptions
 from .engine import (
     DEPENDENCY_GROUP_NAMES,
     collect_downstream_functions,
@@ -19,7 +19,7 @@ from .engine import (
 from .renderer import default_bundle_path, render_subfunction_c_bundle
 
 
-class SubfunctionBundleCommand(LinuxMetaCommand):
+class SubfunctionBundleCommand(CppMetaCommand):
     """Feature 4: export target and downstream child functions into one .c bundle."""
 
     def build_report(
@@ -139,7 +139,7 @@ def export_subfunction_source_bundle(
     function: str,
     output: str | Path | None = None,
     *,
-    repo: str = "linux-7.0",
+    repo: str = ".",
     db: str | None = None,
     file_filter: str | None = None,
     include_macros: bool = True,
@@ -171,3 +171,4 @@ def export_subfunction_source_bundle(
         max_functions=max_functions,
         max_nesting_depth=max_nesting_depth,
     )
+

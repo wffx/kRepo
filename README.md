@@ -1,13 +1,13 @@
 # kRepo
 
-`kRepo` 是一个面向 Linux 内核源码的代码知识库构建工具集。项目读取
+`kRepo` 是一个面向 C/C++ 工程源码的代码知识库构建工具集。项目读取
 VS Code C/C++ 插件 `vscode-cpptools` 生成的 SQLite 元数据库
 `BROWSE.VC.DB`，结合源码启发式分析，围绕指定函数抽取后续生成单元测试
 测试用例和灰盒 Fuzz 测试 harness 所需的上下文知识。
 
 ## 项目目标
 
-本项目不是 Linux 源码仓库，也不是直接生成 harness 的最终工具。它的定位是
+本项目不是某个特定 C/C++ 项目的源码仓库，也不是直接生成 harness 的最终工具。它的定位是
 构建函数级知识库，为后续自动化测试生成提供高质量输入：
 
 - 函数源码和依赖代码片段：宏、常量、typedef、枚举、全局变量、静态变量、
@@ -28,12 +28,12 @@ VS Code C/C++ 插件 `vscode-cpptools` 生成的 SQLite 元数据库
 脚本依赖的 `BROWSE.VC.DB` 由 VS Code C/C++ 插件生成：
 
 1. 安装 VS Code 扩展 `ms-vscode.cpptools`。
-2. 使用 VS Code 打开 Linux 内核源码目录，例如 `linux-7.0`。
+2. 使用 VS Code 打开待分析的 C/C++ 工程源码目录，例如 `my_project`。
 3. 等待 C/C++ 插件完成 browse database 构建。
 4. 默认数据库路径通常为：
 
 ```text
-linux-7.0/.vscode/BROWSE.VC.DB
+my_project/.vscode/BROWSE.VC.DB
 ```
 
 如果数据库路径不同，可以通过 `--db` 显式指定。
@@ -43,7 +43,7 @@ linux-7.0/.vscode/BROWSE.VC.DB
 ```text
 path/to/BROWSE.VC.DB
 path/to/.vscode
-path/to/linux-source-root
+path/to/cpp-source-root
 ```
 
 ## 目录结构
@@ -51,8 +51,10 @@ path/to/linux-source-root
 ```text
 kRepo/
   src/
-    linux_meta_query.py        兼容 CLI 入口和 Python API re-export
-    linux_meta/
+    cpp_meta_query.py        推荐 CLI 入口和 Python API re-export
+    linux_meta_query.py      历史兼容入口，功能等同于 cpp_meta_query.py
+    cpp_meta/                通用 C/C++ Python API re-export
+    linux_meta/              核心实现包，保留历史包名以兼容旧代码
       base.py                  命令基类和通用配置
       models.py                SQLite 元数据模型和常量
       db.py                    SQLite 访问和函数定位
@@ -68,16 +70,16 @@ kRepo/
       renderer.py              Markdown/.c 输出渲染
       cli.py                   argparse 命令行装配
   docs/
-    linux_meta_query_usage.md  详细用法和验证案例
+    cpp_meta_query_usage.md  详细用法和验证案例
   test/
-    test_linux_meta_query.py   Python API 和核心能力烟测
+    test_cpp_meta_query.py   Python API 和核心能力烟测
   .gitignore
 ```
 
-本地 Linux 源码目录、VS Code 生成的数据库和测试生成物默认不入库，例如：
+本地待分析源码目录、VS Code 生成的数据库和测试生成物默认不入库，例如：
 
 ```text
-linux-7.0/
+linux-*/
 **/.vscode/BROWSE.VC.DB
 test/fixtures/*.c
 ```
@@ -87,55 +89,58 @@ test/fixtures/*.c
 查看主帮助：
 
 ```powershell
-python .\src\linux_meta_query.py --help
+python .\src\cpp_meta_query.py --help
 ```
 
 查看某个功能接口的参数：
 
 ```powershell
-python .\src\linux_meta_query.py source --help
-python .\src\linux_meta_query.py subsource --help
-python .\src\linux_meta_query.py calls --help
-python .\src\linux_meta_query.py params --help
-python .\src\linux_meta_query.py report --help
+python .\src\cpp_meta_query.py source --help
+python .\src\cpp_meta_query.py subsource --help
+python .\src\cpp_meta_query.py calls --help
+python .\src\cpp_meta_query.py params --help
+python .\src\cpp_meta_query.py report --help
 ```
 
 指定函数导出 `.c` 分析包：
 
 ```powershell
-python .\src\linux_meta_query.py source vfs_read --file fs\read_write.c --output .\vfs_read_bundle.c
+python .\src\cpp_meta_query.py source parse_config --repo .\my_project --file src\config.c --output .\parse_config_bundle.c
 ```
 
 查询目标函数的上层调用链：
 
 ```powershell
-python .\src\linux_meta_query.py calls can_send --file net\can\af_can.c --max-depth 3
+python .\src\cpp_meta_query.py calls parse_config --repo .\my_project --file src\config.c --max-depth 3
 ```
 
 推断目标函数入参约束：
 
 ```powershell
-python .\src\linux_meta_query.py params vfs_read --file fs\read_write.c
+python .\src\cpp_meta_query.py params parse_config --repo .\my_project --file src\config.c
 ```
 
 导出目标函数及其下游子函数源码分析包：
 
 ```powershell
-python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --max-depth 1 --output .\vfs_read_subfunctions_bundle.c
+python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file src\config.c --max-depth 1 --output .\parse_config_subfunctions_bundle.c
 ```
 
 `subsource` 默认会跳过日志、trace、debug、统计/accounting、instrumentation
 等对核心控制流影响较小的辅助子函数。需要完整保留这些子函数源码时：
 
 ```powershell
-python .\src\linux_meta_query.py subsource vfs_read --file fs\read_write.c --include-auxiliary-calls
+python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file src\config.c --include-auxiliary-calls
 ```
 
 显式指定元数据库：
 
 ```powershell
-python .\src\linux_meta_query.py calls can_send --db .\linux-7.0\.vscode\BROWSE.VC.DB --file net\can\af_can.c
+python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode\BROWSE.VC.DB --file src\config.c
 ```
+
+历史入口 `src\linux_meta_query.py` 仍然保留，已有脚本无需立刻迁移；新用法建议优先使用
+`src\cpp_meta_query.py` 或 Python API `src.cpp_meta`。
 
 ## 四个核心能力
 
@@ -193,7 +198,7 @@ upper_func -> middle_func -> target_func
 核心能力也可以作为 Python API 使用：
 
 ```python
-from src.linux_meta_query import (
+from src.cpp_meta_query import (
     export_source_bundle,
     export_subfunction_source_bundle,
     print_function_call_sequence,
@@ -201,26 +206,30 @@ from src.linux_meta_query import (
 )
 
 export_source_bundle(
-    "vfs_read",
-    output="vfs_read_bundle.c",
-    file_filter=r"fs\read_write.c",
+    "parse_config",
+    output="parse_config_bundle.c",
+    repo=r".\my_project",
+    file_filter=r"src\config.c",
 )
 
 export_subfunction_source_bundle(
-    "vfs_read",
-    output="vfs_read_subfunctions_bundle.c",
-    file_filter=r"fs\read_write.c",
+    "parse_config",
+    output="parse_config_subfunctions_bundle.c",
+    repo=r".\my_project",
+    file_filter=r"src\config.c",
     max_depth=1,
 )
 
 print_function_call_sequence(
-    "can_send",
-    file_filter=r"net\can\af_can.c",
+    "parse_config",
+    repo=r".\my_project",
+    file_filter=r"src\config.c",
 )
 
 print_function_param_constraints(
-    "vfs_read",
-    file_filter=r"fs\read_write.c",
+    "parse_config",
+    repo=r".\my_project",
+    file_filter=r"src\config.c",
 )
 ```
 
@@ -246,9 +255,21 @@ python -m unittest discover -s test -p "test_*.py"
 - `BROWSE.VC.DB` 中部分符号关系表可能为空，因此调用链和参数约束包含源码
   启发式分析结果，不等价于完整编译器级调用图。
 - `source` 输出的 `.c` 文件是知识库分析包，便于阅读和后续处理，不保证可直接
-  作为 Linux 编译单元编译。
+  作为独立 C/C++ 编译单元编译。
 - 同名函数较多时建议使用 `--file` 指定源码路径子串。
-- Linux 源码树和 `BROWSE.VC.DB` 体积较大，默认由 `.gitignore` 排除。
+- 大型源码树和 `BROWSE.VC.DB` 体积较大，默认由 `.gitignore` 排除。
+
+## Linux 验证样例
+
+本仓库的本地测试使用 Linux 源码树作为大型 C 工程验证样例，例如：
+
+```powershell
+python .\src\cpp_meta_query.py source vfs_read --repo .\linux-7.0 --file fs\read_write.c
+python .\src\cpp_meta_query.py calls can_send --repo .\linux-7.0 --file net\can\af_can.c
+```
+
+这些案例用于验证工具可处理大型 C 工程，并不代表工具只支持 Linux。
 
 更多命令、参数和实际验证案例见
-[docs/linux_meta_query_usage.md](docs/linux_meta_query_usage.md)。
+[docs/cpp_meta_query_usage.md](docs/cpp_meta_query_usage.md)。
+

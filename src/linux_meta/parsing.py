@@ -114,3 +114,4 @@ def discover_local_names(source: str) -> set[str]:
 def chunked(values: list[str], size: int = 500) -> Iterable[list[str]]:
     for i in range(0, len(values), size):
         yield values[i : i + size]
+

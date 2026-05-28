@@ -123,3 +123,4 @@ class ParamReport:
     type: str | None
     inferred: list[str]
     evidence: list[str]
+

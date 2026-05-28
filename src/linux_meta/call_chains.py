@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from .base import LinuxMetaCommand, QueryOptions
+from .base import CppMetaCommand, QueryOptions
 from .engine import CallerSite, build_upstream_call_chains
 from .renderer import relpath
 
 
-class CallChainCommand(LinuxMetaCommand):
+class CallChainCommand(CppMetaCommand):
     """Feature 2: print upstream caller chains ending at the target function."""
 
     def print(
@@ -52,7 +52,7 @@ class CallChainCommand(LinuxMetaCommand):
 def print_function_call_sequence(
     function: str,
     *,
-    repo: str = "linux-7.0",
+    repo: str = ".",
     db: str | None = None,
     file_filter: str | None = None,
     include_macros: bool = True,
@@ -77,3 +77,4 @@ def print_function_call_sequence(
         max_chains=max_chains,
         max_callers_per_level=max_callers_per_level,
     )
+

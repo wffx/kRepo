@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from .base import LinuxMetaCommand, QueryOptions
+from .base import CppMetaCommand, QueryOptions
 from .engine import analyze_report
 from .renderer import print_param_constraints
 
 
-class ParamConstraintsCommand(LinuxMetaCommand):
+class ParamConstraintsCommand(CppMetaCommand):
     """Feature 3: print inferred parameter constraints."""
 
     def print(self, function: str) -> None:
@@ -25,7 +25,7 @@ class ParamConstraintsCommand(LinuxMetaCommand):
 def print_function_param_constraints(
     function: str,
     *,
-    repo: str = "linux-7.0",
+    repo: str = ".",
     db: str | None = None,
     file_filter: str | None = None,
     include_macros: bool = True,
@@ -46,3 +46,4 @@ def print_function_param_constraints(
         )
     )
     command.print(function)
+

@@ -31,9 +31,9 @@ def add_common(
     subparser.add_argument("function", help="function name to query")
     subparser.add_argument(
         "--repo",
-        default="linux-7.0",
+        default=".",
         help=(
-            "Linux source root. If --db points at a repo root or .vscode "
+            "C/C++ source root. If --db points at a repo root or .vscode "
             "directory, the source root is inferred when possible."
         ),
     )
@@ -91,18 +91,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Query a VS Code C/C++ BROWSE.VC.DB by function name.\n"
-            "查询 Linux 源码元数据库，导出源码片段、上层调用链和入参约束。"
+            "查询 C/C++ 工程源码元数据库，导出源码片段、上层调用链和入参约束。"
         ),
         epilog="""common configuration:
-  function                 required function name, for example vfs_read or can_send
-  --repo PATH              Linux source root. Default: linux-7.0
+  function                 required function name, for example parse_config or decode_packet
+  --repo PATH              C/C++ source root. Default: current directory (.)
   --db PATH                Metadata DB selector. Accepts:
                              1) path/to/BROWSE.VC.DB
                              2) path/to/.vscode
                              3) repo root containing .vscode/BROWSE.VC.DB
                            When --db is set, --repo is inferred when possible.
   --file TEXT              Source path substring used to choose one definition.
-                           Example: --file fs\\read_write.c
+                           Example: --file src\\config.c
   --max-deps N             Dependency snippet limit. Default: 20; source default: 200;
                            subsource default: 500
   --max-candidates N       Maximum same-name function candidates. Default: 12
@@ -130,18 +130,19 @@ command-specific configuration:
     --no-macros            Hide upper-case macro-like call sites in the report.
 
 examples:
-  python src/linux_meta_query.py --help
-  python src/linux_meta_query.py source --help
-  python src/linux_meta_query.py subsource vfs_read --file fs\\read_write.c --max-depth 2
-  python src/linux_meta_query.py calls can_send --db linux-7.0\\.vscode\\BROWSE.VC.DB --file net\\can\\af_can.c
-  python src/linux_meta_query.py source vfs_read --file fs\\read_write.c --output vfs_read_bundle.c
-  python src/linux_meta_query.py calls vfs_read --file fs\\read_write.c --max-depth 5
-  python src/linux_meta_query.py params vfs_read --file fs\\read_write.c
-  python src/linux_meta_query.py report start_kernel --file init\\main.c --no-macros
+  python src/cpp_meta_query.py --help
+  python src/cpp_meta_query.py source --help
+  python src/cpp_meta_query.py subsource parse_config --repo my_project --file src\\config.c --max-depth 2
+  python src/cpp_meta_query.py calls parse_config --db my_project\\.vscode\\BROWSE.VC.DB --file src\\config.c
+  python src/cpp_meta_query.py source parse_config --repo my_project --file src\\config.c --output parse_config_bundle.c
+  python src/cpp_meta_query.py calls parse_config --repo my_project --file src\\config.c --max-depth 5
+  python src/cpp_meta_query.py params parse_config --repo my_project --file src\\config.c
+  python src/cpp_meta_query.py report parse_config --repo my_project --file src\\config.c --no-macros
 
 notes:
   The legacy form still works:
-    python src/linux_meta_query.py vfs_read --file fs\\read_write.c
+    python src/cpp_meta_query.py parse_config --repo my_project --file src\\config.c
+  The historical src/linux_meta_query.py wrapper remains available for compatibility.
   source recursively includes nested struct/union/enum/typedef dependencies by default.
 """,
         formatter_class=HelpFormatter,
@@ -292,3 +293,4 @@ def main(argv: list[str] | None = None) -> int:
 
     ReportCommand(options).print(args.function, output_format=args.format)
     return 0
+

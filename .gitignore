@@ -1,6 +1,8 @@
-# Local Linux source trees and generated metadata databases
+# Local C/C++ source trees and generated metadata databases
 linux-*/
 linux-7.0/
+third_party-src/
+external-src/
 **/.vscode/BROWSE.VC.DB
 **/.vscode/BROWSE.VC.DB-*
 **/.vscode/*.db

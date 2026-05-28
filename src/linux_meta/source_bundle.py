@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .base import LinuxMetaCommand, QueryOptions
+from .base import CppMetaCommand, QueryOptions
 from .engine import analyze_report
 from .renderer import default_bundle_path, render_c_bundle
 
 
-class SourceBundleCommand(LinuxMetaCommand):
+class SourceBundleCommand(CppMetaCommand):
     """Feature 1: export one function and related snippets into a .c bundle."""
 
     def analyze(self, function: str, *, max_nesting_depth: int = 4) -> dict[str, object]:
@@ -41,7 +41,7 @@ class SourceBundleCommand(LinuxMetaCommand):
 def analyze_function(
     function: str,
     *,
-    repo: str = "linux-7.0",
+    repo: str = ".",
     db: str | None = None,
     file_filter: str | None = None,
     include_macros: bool = True,
@@ -70,7 +70,7 @@ def export_source_bundle(
     function: str,
     output: str | Path | None = None,
     *,
-    repo: str = "linux-7.0",
+    repo: str = ".",
     db: str | None = None,
     file_filter: str | None = None,
     include_macros: bool = True,
@@ -92,3 +92,4 @@ def export_source_bundle(
         )
     )
     return command.export(function, output, max_nesting_depth=max_nesting_depth)
+

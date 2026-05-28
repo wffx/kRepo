@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 
-from .base import LinuxMetaCommand, QueryOptions
+from .base import CppMetaCommand, QueryOptions
 from .engine import analyze_report
 from .renderer import print_markdown
 
 
-class ReportCommand(LinuxMetaCommand):
+class ReportCommand(CppMetaCommand):
     """Compatibility report command combining source, dependencies, calls, and params."""
 
     def build(self, function: str) -> dict[str, object]:
@@ -28,3 +28,4 @@ class ReportCommand(LinuxMetaCommand):
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
             print_markdown(report)
+

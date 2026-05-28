@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from src.linux_meta_query import (
+from src.cpp_meta_query import (
     analyze_function,
     export_source_bundle,
     export_subfunction_source_bundle,
@@ -15,10 +15,13 @@ from src.linux_meta_query import (
 )
 
 
-class LinuxMetaQuerySmokeTest(unittest.TestCase):
+class CppMetaQuerySmokeTest(unittest.TestCase):
+    repo = "linux-7.0"
+
     def test_analyze_function_finds_vfs_read(self) -> None:
         report = analyze_function(
             "vfs_read",
+            repo=self.repo,
             file_filter=r"fs\read_write.c",
             max_deps=2,
             max_snippet_lines=3,
@@ -32,6 +35,7 @@ class LinuxMetaQuerySmokeTest(unittest.TestCase):
             export_source_bundle(
                 "vfs_read",
                 output=output,
+                repo=self.repo,
                 file_filter=r"fs\read_write.c",
                 max_deps=20,
                 max_snippet_lines=6,
@@ -47,6 +51,7 @@ class LinuxMetaQuerySmokeTest(unittest.TestCase):
         with redirect_stdout(stdout):
             print_function_call_sequence(
                 "can_send",
+                repo=self.repo,
                 file_filter=r"net\can\af_can.c",
                 max_depth=2,
                 max_chains=5,
@@ -62,6 +67,7 @@ class LinuxMetaQuerySmokeTest(unittest.TestCase):
             export_subfunction_source_bundle(
                 "vfs_read",
                 output=output,
+                repo=self.repo,
                 file_filter=r"fs\read_write.c",
                 max_depth=1,
                 max_functions=5,
@@ -82,6 +88,7 @@ class LinuxMetaQuerySmokeTest(unittest.TestCase):
         with redirect_stdout(stdout):
             print_function_param_constraints(
                 "vfs_read",
+                repo=self.repo,
                 file_filter=r"fs\read_write.c",
                 max_deps=2,
                 max_snippet_lines=3,
@@ -93,3 +100,4 @@ class LinuxMetaQuerySmokeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -488,3 +488,4 @@ def order_functions_for_bundle(
     ):
         visit(function_id)
     return ordered
+

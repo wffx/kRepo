@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI compatibility wrapper for the C/C++ metadata query package."""
+"""Preferred CLI wrapper for the C/C++ metadata query package."""
 
 from __future__ import annotations
 
