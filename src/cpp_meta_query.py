@@ -18,7 +18,7 @@ from src.cpp_meta import (
     print_function_call_sequence,
     print_function_param_constraints,
 )
-from src.linux_meta.cli import main
+from src.cpp_meta.cli import main
 
 
 __all__ = [

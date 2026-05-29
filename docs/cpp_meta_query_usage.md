@@ -22,32 +22,27 @@
 当前实现已拆分为可扩展的包结构：
 
 ```text
-src/cpp_meta_query.py      兼容 CLI 入口和 Python API re-export
-src/linux_meta_query.py    历史兼容入口，功能等同于 cpp_meta_query.py
-src/cpp_meta/__init__.py   通用 C/C++ Python API re-export
-src/linux_meta/base.py       命令基类和通用配置
-src/linux_meta/models.py     SQLite 元数据模型和常量
-src/linux_meta/db.py         SQLite 访问和函数定位
-src/linux_meta/parsing.py    源码切片、清洗和 token 提取
-src/linux_meta/dependencies.py
+src/cpp_meta_query.py      CLI 入口和 Python API re-export
+src/cpp_meta/__init__.py   通用 C/C++ Python API
+src/cpp_meta/base.py       命令基类和通用配置
+src/cpp_meta/models.py     SQLite 元数据模型和常量
+src/cpp_meta/db.py         SQLite 访问和函数定位
+src/cpp_meta/parsing.py    源码切片、清洗和 token 提取
+src/cpp_meta/dependencies.py
                              宏/类型/变量依赖收集和嵌套类型展开
-src/linux_meta/calls.py      调用点解析、上游/下游调用图搜索
-src/linux_meta/params.py     入参约束推断
-src/linux_meta/engine.py     公共分析报告聚合
-src/linux_meta/source_bundle.py
-src/linux_meta/call_chains.py
-src/linux_meta/param_constraints.py
-src/linux_meta/subfunction_bundle.py
-src/linux_meta/renderer.py
-src/linux_meta/cli.py
+src/cpp_meta/calls.py      调用点解析、上游/下游调用图搜索
+src/cpp_meta/params.py     入参约束推断
+src/cpp_meta/engine.py     公共分析报告聚合
+src/cpp_meta/source_bundle.py
+src/cpp_meta/call_chains.py
+src/cpp_meta/param_constraints.py
+src/cpp_meta/subfunction_bundle.py
+src/cpp_meta/renderer.py
+src/cpp_meta/cli.py
 ```
 
 四个功能分别拆在独立模块中，后续新增知识库构建能力时，优先新增新的 command
 模块并复用 `CppMetaCommand` 基类。
-
-`src/linux_meta` 是早期面向 Linux 验证样例时留下的历史包名；当前实现已经按通用
-C/C++ 工程使用方式组织，新增代码建议通过 `src.cpp_meta_query` 或 `src.cpp_meta`
-导入公共接口。
 
 ## 查看终端帮助
 
@@ -89,6 +84,10 @@ python .\src\cpp_meta_query.py report --help
 
 --max-snippet-lines N
   每个依赖源码片段最多输出多少行，默认 80。
+
+--max-nesting-depth N
+  source/subsource 的嵌套结构体、union、enum、typedef 递归解析层数，
+  默认 4 层。
 ```
 
 ## 四个功能接口
@@ -97,13 +96,13 @@ python .\src\cpp_meta_query.py report --help
 
 ### 1. source：输出源码片段并合并成 .c 文件
 
-输入函数名，输出函数源码，以及源码涉及的结构体、typedef、枚举/枚举值、常量/宏、全局变量、静态变量等代码片段，合并为一个 `.c` 文件。对于结构体、union、enum、typedef 中继续引用的嵌套类型，脚本会递归解析并一并写入 `.c` 文件。
+输入函数名，输出函数源码，以及源码涉及的结构体、typedef、枚举/枚举值、常量/宏、全局变量、静态变量等代码片段，合并为一个 `.c` 文件。对于结构体、union、enum、typedef 中继续引用的嵌套类型，脚本会递归解析并一并写入 `.c` 文件。默认嵌套解析层数为 `4`。
 
 ```powershell
 python .\src\cpp_meta_query.py source parse_config --repo .\my_project --file src\config.c --output .\parse_config_bundle.c
 ```
 
-递归深度默认是 4 层，可以调整：
+嵌套类型递归深度默认是 `4` 层，可以调整：
 
 ```powershell
 python .\src\cpp_meta_query.py source parse_config --repo .\my_project --file src\config.c --max-nesting-depth 6
@@ -146,7 +145,7 @@ python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file
 ```
 
 函数体部分会尽量按“被调用者在前，调用者在后”排序。结构体、union、enum、typedef
-中的嵌套类型会递归解析并一并写入 `.c` 文件。
+中的嵌套类型会递归解析并一并写入 `.c` 文件，默认递归解析 `4` 层。
 
 常用限制参数：
 
@@ -206,15 +205,7 @@ Evidence:
 - 562:     if (unlikely(!access_ok(buf, count)))
 ```
 
-## 兼容的完整报告接口
-
-旧用法仍然保留，会自动走 `report`：
-
-```powershell
-python .\src\cpp_meta_query.py parse_config --repo .\my_project --file src\config.c
-```
-
-等价于：
+## 完整报告接口
 
 ```powershell
 python .\src\cpp_meta_query.py report parse_config --repo .\my_project --file src\config.c
@@ -330,7 +321,7 @@ python .\src\cpp_meta_query.py calls parse_config --db .\my_project --file src\c
 : 完整报告中的内部调用序列可用该选项跳过大写宏风格调用。
 
 `--max-nesting-depth`
-: `source` 和 `subsource` 子命令使用，控制结构体/union/enum/typedef 递归解析层数，默认 `4`。
+: `source` 和 `subsource` 子命令使用，控制结构体/union/enum/typedef 递归解析层数，默认 `4` 层。
 
 ## 子命令专用参数速查
 

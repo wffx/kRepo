@@ -52,9 +52,7 @@ path/to/cpp-source-root
 kRepo/
   src/
     cpp_meta_query.py        推荐 CLI 入口和 Python API re-export
-    linux_meta_query.py      历史兼容入口，功能等同于 cpp_meta_query.py
-    cpp_meta/                通用 C/C++ Python API re-export
-    linux_meta/              核心实现包，保留历史包名以兼容旧代码
+    cpp_meta/                核心实现包和通用 C/C++ Python API
       base.py                  命令基类和通用配置
       models.py                SQLite 元数据模型和常量
       db.py                    SQLite 访问和函数定位
@@ -139,9 +137,6 @@ python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file
 python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode\BROWSE.VC.DB --file src\config.c
 ```
 
-历史入口 `src\linux_meta_query.py` 仍然保留，已有脚本无需立刻迁移；新用法建议优先使用
-`src\cpp_meta_query.py` 或 Python API `src.cpp_meta`。
-
 ## 四个核心能力
 
 ### 1. source
@@ -153,7 +148,8 @@ python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode\BROW
 常量/宏 -> typedef -> 枚举/枚举值 -> 全局变量 -> 静态变量 -> 结构体/union -> 函数
 ```
 
-结构体、union、enum、typedef 中继续引用的嵌套类型会按层递归解析。
+结构体、union、enum、typedef 中继续引用的嵌套类型会按层递归解析。默认嵌套解析层数为
+`4`，可通过 `--max-nesting-depth` 调整。
 
 ### 2. subsource
 
@@ -168,6 +164,7 @@ python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode\BROW
 
 函数体部分会尽量按“被调用者在前，调用者在后”排序，减少先引用后定义的情况。
 对于调用规模较大的函数，可以通过 `--max-depth`、`--max-functions` 控制输出范围。
+依赖片段中的嵌套类型默认递归解析 `4` 层，可通过 `--max-nesting-depth` 调整。
 默认会跳过日志、trace、debug、统计/accounting、instrumentation 等辅助函数，
 例如 `add_rchar`、`inc_syscr` 这类统计调用；生成文件会在
 `Skipped auxiliary callees` 段落中记录跳过项。

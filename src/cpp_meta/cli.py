@@ -11,6 +11,9 @@ from .source_bundle import SourceBundleCommand
 from .subfunction_bundle import SubfunctionBundleCommand
 
 
+DEFAULT_NESTING_DEPTH = 4
+
+
 class HelpFormatter(
     argparse.ArgumentDefaultsHelpFormatter,
     argparse.RawDescriptionHelpFormatter,
@@ -84,10 +87,6 @@ def add_common(
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    commands = {"source", "subsource", "calls", "params", "report"}
-    if argv and argv[0] not in commands and not argv[0].startswith("-"):
-        argv = ["report", *argv]
-
     parser = argparse.ArgumentParser(
         description=(
             "Query a VS Code C/C++ BROWSE.VC.DB by function name.\n"
@@ -112,12 +111,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 command-specific configuration:
   source:
     --output, -o PATH      Output .c bundle. Default: <function>_source_bundle.c
-    --max-nesting-depth N  Nested struct/union/enum/typedef recursion depth. Default: 4
+    --max-nesting-depth N  Nested struct/union/enum/typedef recursion depth.
+                           Default: 4 levels.
   subsource:
     --output, -o PATH      Output .c bundle. Default: <function>_subfunctions_bundle.c
     --max-depth N          Downstream child-function recursion depth. Default: 3
     --max-functions N      Maximum function bodies included. Default: 200
-    --max-nesting-depth N  Nested struct/union/enum/typedef recursion depth. Default: 4
+    --max-nesting-depth N  Nested struct/union/enum/typedef recursion depth.
+                           Default: 4 levels.
     --include-auxiliary-calls
                            Include logging/trace/debug/stats helper callees.
   calls:
@@ -140,10 +141,8 @@ examples:
   python src/cpp_meta_query.py report parse_config --repo my_project --file src\\config.c --no-macros
 
 notes:
-  The legacy form still works:
-    python src/cpp_meta_query.py parse_config --repo my_project --file src\\config.c
-  The historical src/linux_meta_query.py wrapper remains available for compatibility.
-  source recursively includes nested struct/union/enum/typedef dependencies by default.
+  source and subsource recursively include nested struct/union/enum/typedef
+  dependencies. The default nested parsing depth is 4 levels.
 """,
         formatter_class=HelpFormatter,
     )
@@ -168,8 +167,11 @@ notes:
     source_parser.add_argument(
         "--max-nesting-depth",
         type=int,
-        default=4,
-        help="nested type dependency recursion depth for source bundles",
+        default=DEFAULT_NESTING_DEPTH,
+        help=(
+            "nested struct/union/enum/typedef recursion depth for source "
+            "bundles; default: %(default)s levels"
+        ),
     )
 
     subsource_parser = subparsers.add_parser(
@@ -199,8 +201,11 @@ notes:
     subsource_parser.add_argument(
         "--max-nesting-depth",
         type=int,
-        default=4,
-        help="nested type dependency recursion depth for dependency snippets",
+        default=DEFAULT_NESTING_DEPTH,
+        help=(
+            "nested struct/union/enum/typedef recursion depth for dependency "
+            "snippets; default: %(default)s levels"
+        ),
     )
     subsource_parser.add_argument(
         "--include-auxiliary-calls",

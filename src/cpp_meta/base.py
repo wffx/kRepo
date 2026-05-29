@@ -34,6 +34,3 @@ class CppMetaCommand:
             raise SystemExit(f"未找到函数: {function}")
         return candidates[0], candidates[1 : self.options.max_candidates]
 
-
-LinuxMetaCommand = CppMetaCommand
-
