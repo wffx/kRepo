@@ -1,7 +1,10 @@
 # cpp_meta_query.py 通用 C/C++ 工程用法和验证案例
 
 `cpp_meta_query.py` 读取 VS Code C/C++ 插件生成的
-`BROWSE.VC.DB`，按函数名查询 C/C++ 工程源码元数据，并提供 4 个独立接口。
+`BROWSE.VC.DB`，按函数名或符号名查询 C/C++ 工程源码元数据，并提供 5 个独立接口。
+
+符号解析、同名候选选择、下游子函数去重和调用链歧义等实现细节见
+`docs/api_implementation_details.md`。本文档侧重命令用法和验证案例。
 
 默认源码根目录：
 
@@ -38,10 +41,11 @@ src/cpp_meta/call_chains.py
 src/cpp_meta/param_constraints.py
 src/cpp_meta/subfunction_bundle.py
 src/cpp_meta/renderer.py
+src/cpp_meta/symbol_lookup.py
 src/cpp_meta/cli.py
 ```
 
-四个功能分别拆在独立模块中，后续新增知识库构建能力时，优先新增新的 command
+五个功能分别拆在独立模块中，后续新增知识库构建能力时，优先新增新的 command
 模块并复用 `CppMetaCommand` 基类。
 
 ## 查看终端帮助
@@ -60,6 +64,7 @@ python .\src\cpp_meta_query.py subsource --help
 python .\src\cpp_meta_query.py calls --help
 python .\src\cpp_meta_query.py params --help
 python .\src\cpp_meta_query.py report --help
+python .\src\cpp_meta_query.py symbol --help
 ```
 
 `--help` 中重点配置项包括：
@@ -88,9 +93,13 @@ python .\src\cpp_meta_query.py report --help
 --max-nesting-depth N
   source/subsource 的嵌套结构体、union、enum、typedef 递归解析层数，
   默认 4 层。
+
+--kind KIND
+  symbol 子命令使用，用于限定非函数符号类别。可选 macro、macro_define、
+  typedef、enum、enumerator、variable、struct、union。
 ```
 
-## 四个功能接口
+## 五个功能接口
 
 脚本同时支持命令行接口和 Python import 接口。命令行接口如下。
 
@@ -211,6 +220,35 @@ Evidence:
 - 562:     if (unlikely(!access_ok(buf, count)))
 ```
 
+### 5. symbol：输出非函数符号源码片段
+
+输入符号名，检索宏定义、typedef、枚举、枚举值、变量、结构体或 union 等非函数符号，
+并在标准输出中打印匹配到的源码片段。该接口不写输出文件。
+
+```powershell
+python .\src\cpp_meta_query.py symbol MY_MACRO --repo .\my_project --kind macro
+```
+
+如果同名符号在数据库中出现多次，`symbol` 会打印多个候选，数量由 `--max-candidates`
+控制。可用 `--kind` 限定符号类别，用 `--file` 限定源码路径子串：
+
+```powershell
+python .\src\cpp_meta_query.py symbol my_struct --repo .\my_project --kind struct --file include\types.h
+```
+
+输出示例：
+
+````text
+Symbol: MY_MACRO
+Kind filter: macro
+Candidates: 1 shown / 1 total
+
+[1] macro_define MY_MACRO (MY_PROJECT\INCLUDE\CONFIG.H:12-12)
+```c
+#define MY_MACRO 1
+```
+````
+
 ## 完整报告接口
 
 `report` 是 `source`、`calls`、`params`、`subsource` 四个能力的统一汇总：
@@ -235,14 +273,16 @@ python .\src\cpp_meta_query.py report parse_config --repo .\my_project --file sr
 
 ## Python API 用法
 
-也可以在其他 Python 脚本中直接 import 四个接口：
+也可以在其他 Python 脚本中直接 import 五个接口：
 
 ```python
 from src.cpp_meta_query import (
     export_source_bundle,
     export_subfunction_source_bundle,
+    lookup_symbol_source,
     print_function_call_sequence,
     print_function_param_constraints,
+    print_symbol_source,
 )
 
 export_source_bundle(
@@ -275,6 +315,18 @@ print_function_param_constraints(
     repo=r".\my_project",
     file_filter=r"src\config.c",
 )
+
+print_symbol_source(
+    "MY_MACRO",
+    repo=r".\my_project",
+    kind="macro",
+)
+
+symbol_report = lookup_symbol_source(
+    "my_struct",
+    repo=r".\my_project",
+    kind="struct",
+)
 ```
 
 ## 通用参数
@@ -286,8 +338,8 @@ python .\src\cpp_meta_query.py --help
 python .\src\cpp_meta_query.py source --help
 ```
 
-`function`
-: 必填，待查询函数名，例如 `parse_config`、`decode_packet`、`vfs_read`。
+`function` / `symbol`
+: 必填，待查询函数名或非函数符号名，例如 `parse_config`、`decode_packet`、`vfs_read`、`MY_MACRO`。
 
 `--repo`
 : C/C++ 源码根目录，默认当前目录 `.`。
@@ -304,13 +356,13 @@ python .\src\cpp_meta_query.py calls parse_config --db .\my_project --file src\c
 ```
 
 `--file`
-: 源文件路径子串，用来在同名函数中选择目标定义，例如 `src\config.c`。
+: 源文件路径子串，用来在同名函数或同名符号候选中收窄范围，例如 `src\config.c`。
 
 `--max-deps`
 : 每类依赖最多输出多少项。`calls`、`params`、`report` 默认 `20`；`source` 默认 `200`；`subsource` 默认 `500`，用于容纳多个子函数的合并依赖。
 
 `--max-candidates`
-: 同名函数候选最多保留多少项，默认 `12`。
+: 同名函数或同名符号候选最多保留多少项，默认 `12`。
 
 `--max-snippet-lines`
 : 结构体、宏、变量等依赖项的源码片段最多输出多少行，默认 `80`。
@@ -345,6 +397,9 @@ python .\src\cpp_meta_query.py calls parse_config --db .\my_project --file src\c
 `--max-nesting-depth`
 : `source` 和 `subsource` 子命令使用，控制结构体/union/enum/typedef 递归解析层数，默认 `4` 层。
 
+`--kind`
+: 仅 `symbol` 子命令使用，限定非函数符号类别。可选 `macro`、`macro_define`、`typedef`、`enum`、`enumerator`、`variable`、`struct`、`union`。
+
 ## 子命令专用参数速查
 
 `source`
@@ -361,6 +416,9 @@ python .\src\cpp_meta_query.py calls parse_config --db .\my_project --file src\c
 
 `report`
 : 打印四个功能的统一汇总报告。支持 `--format markdown|json` 和 `--no-macros`。
+
+`symbol`
+: 打印非函数符号源码片段。常用参数是 `--kind`、`--file`、`--max-candidates`、`--max-snippet-lines`。
 
 ## Linux 大型 C 工程验证案例
 
@@ -577,6 +635,27 @@ python .\src\cpp_meta_query.py params do_sys_openat2 --repo .\linux-7.0 --file f
   how:
     struct open_how *，会通过 how->flags 解引用，也会传入 build_open_flags()。
 ```
+
+### 案例 6：EINVAL 宏符号源码片段检索
+
+命令：
+
+```powershell
+python .\src\cpp_meta_query.py symbol EINVAL --repo .\linux-7.0 --kind macro --max-candidates 2 --max-snippet-lines 2
+```
+
+验证结果摘要：
+
+````text
+Symbol: EINVAL
+Kind filter: macro
+Candidates: 2 shown / 7 total
+
+[1] macro_define EINVAL (...)
+```c
+#define ...
+```
+````
 
 ## 已知边界
 

@@ -10,8 +10,10 @@ from src.cpp_meta_query import (
     analyze_function,
     export_source_bundle,
     export_subfunction_source_bundle,
+    lookup_symbol_source,
     print_function_call_sequence,
     print_function_param_constraints,
+    print_symbol_source,
 )
 from src.cpp_meta.base import QueryOptions
 from src.cpp_meta.filters import is_test_symbol_path
@@ -102,6 +104,32 @@ class CppMetaQuerySmokeTest(unittest.TestCase):
         text = stdout.getvalue()
         self.assertIn("Parameter: buf", text)
         self.assertIn("__user", text)
+
+    def test_symbol_lookup_prints_non_function_snippet(self) -> None:
+        report = lookup_symbol_source(
+            "EINVAL",
+            repo=self.repo,
+            kind="macro",
+            max_candidates=3,
+            max_snippet_lines=2,
+        )
+        self.assertGreater(report["total_candidates"], 0)
+        self.assertEqual(report["candidates"][0]["kind"], "macro_define")
+        self.assertIn("EINVAL", report["candidates"][0]["snippet"])
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            print_symbol_source(
+                "EINVAL",
+                repo=self.repo,
+                kind="macro",
+                max_candidates=1,
+                max_snippet_lines=2,
+            )
+        text = stdout.getvalue()
+        self.assertIn("Symbol: EINVAL", text)
+        self.assertIn("macro_define EINVAL", text)
+        self.assertIn("#define", text)
 
     def test_report_combines_public_feature_outputs(self) -> None:
         report = ReportCommand(

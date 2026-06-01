@@ -12,6 +12,7 @@ VS Code C/C++ 插件 `vscode-cpptools` 生成的 SQLite 元数据库
 
 - 函数源码和依赖代码片段：宏、常量、typedef、枚举、全局变量、静态变量、
   结构体、嵌套结构体、目标函数源码和下游子函数源码。
+- 符号源码片段：按宏、typedef、枚举、变量、结构体、union 等非函数符号名检索源码片段。
 - 上层调用链：按 `a -> b -> target` 形式展示目标函数被哪些上层函数调用。
 - 入参约束：根据函数体上下文推断参数类型、指针属性、用户态指针、范围检查、
   常量约束和关键证据行。
@@ -65,10 +66,13 @@ kRepo/
       call_chains.py           功能 2：上层调用链
       param_constraints.py     功能 3：入参约束
       subfunction_bundle.py    功能 4：目标函数和下游子函数分析包
+      symbol_lookup.py         功能 5：非函数符号源码片段检索
       renderer.py              Markdown/.c 输出渲染
       cli.py                   argparse 命令行装配
   docs/
     cpp_meta_query_usage.md  详细用法和验证案例
+    api_implementation_details.md
+                              API 实现细节、符号歧义和去重策略
   test/
     test_cpp_meta_query.py   Python API 和核心能力烟测
   .gitignore
@@ -98,6 +102,7 @@ python .\src\cpp_meta_query.py subsource --help
 python .\src\cpp_meta_query.py calls --help
 python .\src\cpp_meta_query.py params --help
 python .\src\cpp_meta_query.py report --help
+python .\src\cpp_meta_query.py symbol --help
 ```
 
 指定函数导出 `.c` 分析包：
@@ -131,13 +136,20 @@ python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file
 python .\src\cpp_meta_query.py subsource parse_config --repo .\my_project --file src\config.c --include-auxiliary-calls
 ```
 
+查询非函数符号源码片段：
+
+```powershell
+python .\src\cpp_meta_query.py symbol MY_MACRO --repo .\my_project --kind macro
+python .\src\cpp_meta_query.py symbol my_struct --repo .\my_project --kind struct --file include\types.h
+```
+
 显式指定元数据库：
 
 ```powershell
 python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode\BROWSE.VC.DB --file src\config.c
 ```
 
-## 四个核心能力
+## 五个核心能力
 
 ### 1. source
 
@@ -194,6 +206,18 @@ upper_func -> middle_func -> target_func
 - 参数是否参与大小、范围、flag、NULL 判断。
 - 相关源码证据行。
 
+### 5. symbol
+
+`symbol` 根据非函数符号名检索源码片段，并直接打印到终端，不写文件。适用于宏定义、
+typedef、枚举、枚举值、全局变量、静态变量、结构体和 union 等符号。
+
+```powershell
+python .\src\cpp_meta_query.py symbol MY_MACRO --repo .\my_project --kind macro
+```
+
+如果同名符号在数据库中出现多次，`symbol` 会按候选顺序打印多个片段，可通过
+`--kind` 和 `--file` 收窄范围。
+
 ### report
 
 `report` 是四个核心能力的统一汇总。它会在一个 Markdown 或 JSON 报告中同时给出：
@@ -212,8 +236,10 @@ upper_func -> middle_func -> target_func
 from src.cpp_meta_query import (
     export_source_bundle,
     export_subfunction_source_bundle,
+    lookup_symbol_source,
     print_function_call_sequence,
     print_function_param_constraints,
+    print_symbol_source,
 )
 
 export_source_bundle(
@@ -241,6 +267,18 @@ print_function_param_constraints(
     "parse_config",
     repo=r".\my_project",
     file_filter=r"src\config.c",
+)
+
+print_symbol_source(
+    "MY_MACRO",
+    repo=r".\my_project",
+    kind="macro",
+)
+
+symbol_report = lookup_symbol_source(
+    "my_struct",
+    repo=r".\my_project",
+    kind="struct",
 )
 ```
 
