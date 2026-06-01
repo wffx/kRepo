@@ -168,6 +168,8 @@ python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode\BROW
 默认会跳过日志、trace、debug、统计/accounting、instrumentation 等辅助函数，
 例如 `add_rchar`、`inc_syscr` 这类统计调用；生成文件会在
 `Skipped auxiliary callees` 段落中记录跳过项。
+同时会排除 `test`、`tests`、`testing`、`selftests`、`DT`、`ST` 等测试目录下的符号索引，
+避免测试代码中的同名符号混入下游函数分析包后造成重定义。
 
 ### 3. calls
 
@@ -189,6 +191,16 @@ upper_func -> middle_func -> target_func
 - 是否经过 `access_ok`、`copy_*_user` 等检查。
 - 参数是否参与大小、范围、flag、NULL 判断。
 - 相关源码证据行。
+
+### report
+
+`report` 是四个核心能力的统一汇总。它会在一个 Markdown 或 JSON 报告中同时给出：
+
+- 与 `source` 一致的目标函数源码和依赖片段，包含默认 `4` 层嵌套类型解析。
+- 与 `calls` 一致的上层调用链，按 `a -> b -> target` 展示。
+- 与 `params` 一致的入参约束和证据行。
+- 与 `subsource` 一致的下游子函数源码分析摘要、辅助调用跳过项和限制信息。
+长代码片段会被压缩为文件路径和行号，避免报告输出被大段源码撑得过长。
 
 ## Python API
 

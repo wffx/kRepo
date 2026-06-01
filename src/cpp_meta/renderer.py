@@ -61,7 +61,8 @@ def render_subfunction_c_bundle(report: dict[str, object]) -> str:
         f"max_depth={limits['max_depth']}, "
         f"max_functions={limits['max_functions']}, "
         f"max_nesting_depth={limits['max_nesting_depth']}, "
-        f"include_auxiliary={limits['include_auxiliary']}"
+        f"include_auxiliary={limits['include_auxiliary']}, "
+        f"exclude_test_symbols={limits.get('exclude_test_symbols', False)}"
     )
     lines.append(" *")
     lines.append(" * This file is a source-analysis bundle for knowledge-base construction.")
@@ -240,11 +241,94 @@ def print_item_group(title: str, items: list[dict[str, object]]) -> None:
         print(
             f"- `{item['name']}` ({item['kind']}, {relpath(str(item['file']))}:{item['start_line']})"
         )
+        if item.get("snippet_omitted"):
+            location = str(item.get("snippet_location", item.get("file", "<unknown>")))
+            print(
+                f"  - 代码片段较长，已省略内联内容；位置: "
+                f"`{relpath(location)}`，约 {item.get('snippet_lines', '?')} 行。"
+            )
+            continue
         snippet = str(item.get("snippet", "")).strip()
         if snippet:
             print("```c")
             print(snippet)
             print("```")
+    print()
+
+
+def print_upstream_call_chains(chains: object) -> None:
+    chain_list = chains if isinstance(chains, list) else []
+    if not chain_list:
+        print("- 未发现上层调用链")
+        print()
+        return
+    for idx, chain in enumerate(chain_list, start=1):
+        sites = chain if isinstance(chain, list) else []
+        names = [
+            str(site.get("caller", {}).get("name", "<unknown>"))
+            for site in sites
+            if isinstance(site, dict)
+        ]
+        if names:
+            print(f"{idx}. " + " -> ".join(names))
+        details = []
+        for site in sites[:-1]:
+            if not isinstance(site, dict):
+                continue
+            caller = site.get("caller", {})
+            if not isinstance(caller, dict):
+                continue
+            details.append(
+                f"{caller.get('name', '<unknown>')}@"
+                f"{relpath(str(caller.get('file', '<unknown>')))}:{site.get('line', '?')}"
+            )
+        if details:
+            print("   " + " | ".join(details))
+    print()
+
+
+def print_subfunction_summary(report: dict[str, object]) -> None:
+    sub_report = report.get("subfunction_bundle")
+    if not isinstance(sub_report, dict):
+        print("- 未生成下游子函数分析")
+        print()
+        return
+    functions = sub_report.get("functions", [])
+    function_items = functions if isinstance(functions, list) else []
+    print(f"- 函数源码数量: {len(function_items)}")
+    skipped = sub_report.get("skipped_auxiliary_calls", [])
+    skipped_items = skipped if isinstance(skipped, list) else []
+    print(f"- 跳过辅助调用数量: {len(skipped_items)}")
+    limits = sub_report.get("limits", {})
+    if isinstance(limits, dict):
+        print(
+            "- 限制: "
+            f"max_depth={limits.get('max_depth')}, "
+            f"max_functions={limits.get('max_functions')}, "
+            f"max_nesting_depth={limits.get('max_nesting_depth')}, "
+            f"include_auxiliary={limits.get('include_auxiliary')}, "
+            f"exclude_test_symbols={limits.get('exclude_test_symbols')}"
+        )
+    if function_items:
+        print("- 函数顺序:")
+        for idx, function_report in enumerate(function_items, start=1):
+            if not isinstance(function_report, dict):
+                continue
+            item = function_report.get("item", {})
+            if not isinstance(item, dict):
+                continue
+            print(
+                f"  {idx}. `{item.get('name', '<unknown>')}` "
+                f"({relpath(str(item.get('file', '<unknown>')))}:"
+                f"{item.get('start_line', '?')}-{item.get('end_line', '?')})"
+            )
+    if skipped_items:
+        print("- 跳过的辅助调用:")
+        for item in skipped_items[:20]:
+            if isinstance(item, dict):
+                print(f"  - `{item.get('name', '<unknown>')}` at line {item.get('line', '?')}")
+        if len(skipped_items) > 20:
+            print(f"  - ... 还有 {len(skipped_items) - 20} 项")
     print()
 
 
@@ -259,22 +343,35 @@ def print_markdown(report: dict[str, object]) -> None:
         print(f"- 还有 {len(report['ambiguous_candidates'])} 个同名候选，当前选择源码跨度最大的定义。")
     print()
     print("## 函数源码")
-    print("```c")
-    print(report["source"])
-    print("```")
+    if report.get("source_omitted"):
+        print(
+            "- 函数源码较长，已省略内联内容；位置: "
+            f"`{relpath(str(report.get('source_location', selected['file'])))}`，"
+            f"约 {report.get('source_lines', '?')} 行。"
+        )
+    else:
+        print("```c")
+        print(report["source"])
+        print("```")
     print()
 
     deps = report["dependencies"]
-    print("## 源码涉及的结构/变量/常量")
-    print_item_group("结构体/联合体", deps["structures"])
+    print("## 源码依赖片段")
+    print_item_group("常量/宏", deps["constants"])
     print_item_group("typedef 类型", deps["typedefs"])
     print_item_group("枚举/枚举值", deps["enums"])
-    print_item_group("常量/宏", deps["constants"])
     print_item_group("全局变量", deps["global_variables"])
     print_item_group("静态变量", deps["static_variables"])
+    print_item_group("结构体/联合体", deps["structures"])
 
-    print("## 函数调用序列")
-    calls = report["calls"]
+    print("## 上层调用链")
+    print_upstream_call_chains(report.get("call_chains", []))
+
+    print("## 下游子函数源码分析")
+    print_subfunction_summary(report)
+
+    print("## 目标函数直接调用点")
+    calls = report.get("calls", [])
     if not calls:
         print("- 未发现直接调用")
     for idx, call in enumerate(calls, start=1):

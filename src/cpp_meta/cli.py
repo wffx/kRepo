@@ -79,7 +79,7 @@ def add_common(
         action="store_false",
         default=argparse.SUPPRESS,
         help=(
-            "exclude upper-case macro-like call sites from call sequence"
+            "exclude upper-case macro-like direct call sites from report details"
             if show_no_macros
             else argparse.SUPPRESS
         ),
@@ -128,7 +128,7 @@ command-specific configuration:
                            Maximum direct callers explored per function. Default: 80
   report:
     --format markdown|json Output format. Default: markdown
-    --no-macros            Hide upper-case macro-like call sites in the report.
+    --no-macros            Hide upper-case macro-like direct call sites in report details.
 
 examples:
   python src/cpp_meta_query.py --help
@@ -180,7 +180,8 @@ notes:
         description=(
             "Export a .c analysis bundle containing the target function, "
             "recursively resolved child functions, and all collected dependency snippets. "
-            "Function bodies are ordered with callees before callers when possible."
+            "Function bodies are ordered with callees before callers when possible. "
+            "Symbols indexed from test/tests/testing/selftests/dt/st directories are excluded."
         ),
         formatter_class=HelpFormatter,
     )
@@ -236,8 +237,12 @@ notes:
 
     report_parser = subparsers.add_parser(
         "report",
-        help="print the original full report",
-        description="Print the combined report.",
+        help="print a unified report for source, calls, params, and subsource",
+        description=(
+            "Print the unified report. It summarizes source dependencies with nested "
+            "types, upstream caller chains, parameter constraints, and downstream "
+            "subfunction analysis using the existing feature defaults."
+        ),
         formatter_class=HelpFormatter,
     )
     add_common(report_parser, show_no_macros=True)

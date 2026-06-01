@@ -13,6 +13,9 @@ from src.cpp_meta_query import (
     print_function_call_sequence,
     print_function_param_constraints,
 )
+from src.cpp_meta.base import QueryOptions
+from src.cpp_meta.filters import is_test_symbol_path
+from src.cpp_meta.report import ReportCommand
 
 
 class CppMetaQuerySmokeTest(unittest.TestCase):
@@ -80,6 +83,8 @@ class CppMetaQuerySmokeTest(unittest.TestCase):
         self.assertIn("rw_verify_area", text)
         self.assertIn("vfs_read", text)
         self.assertIn("Skipped auxiliary callees", text)
+        self.assertNotIn("TOOLS\\TESTING", text.upper())
+        self.assertNotIn("SELFTESTS", text.upper())
         self.assertNotRegex(text, r"/\* \[\d+\] add_rchar")
         self.assertNotRegex(text, r"/\* \[\d+\] inc_syscr")
 
@@ -96,6 +101,40 @@ class CppMetaQuerySmokeTest(unittest.TestCase):
         text = stdout.getvalue()
         self.assertIn("Parameter: buf", text)
         self.assertIn("__user", text)
+
+    def test_report_combines_public_feature_outputs(self) -> None:
+        report = ReportCommand(
+            QueryOptions(
+                repo=self.repo,
+                file_filter=r"fs\read_write.c",
+                max_deps=20,
+                max_snippet_lines=6,
+            )
+        ).build("vfs_read")
+        self.assertEqual(report["report_kind"], "unified")
+        self.assertIn("call_chains", report)
+        self.assertIn("subfunction_bundle", report)
+
+        structures = {item["name"] for item in report["dependencies"]["structures"]}
+        self.assertIn("file", structures)
+        self.assertIn("file_operations", structures)
+
+        params = {item["name"]: item for item in report["param_constraints"]}
+        self.assertIn("buf", params)
+        self.assertIn("__user", params["buf"]["type"])
+
+        functions = report["subfunction_bundle"]["functions"]
+        function_names = {item["item"]["name"] for item in functions}
+        self.assertIn("vfs_read", function_names)
+        self.assertIn("rw_verify_area", function_names)
+        self.assertTrue(functions[0]["source_omitted"])
+        self.assertIn("source_location", functions[0])
+
+    def test_test_symbol_path_filter_matches_common_test_dirs(self) -> None:
+        self.assertTrue(is_test_symbol_path(r"F:\repo\tools\testing\selftests\foo.c"))
+        self.assertTrue(is_test_symbol_path(r"F:\repo\DT\case.c"))
+        self.assertTrue(is_test_symbol_path(r"F:\repo\ST\case.c"))
+        self.assertFalse(is_test_symbol_path(r"F:\repo\src\core\foo.c"))
 
 
 if __name__ == "__main__":
