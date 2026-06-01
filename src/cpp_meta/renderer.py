@@ -69,24 +69,33 @@ def render_subfunction_c_bundle(report: dict[str, object]) -> str:
     lines.append(" * It is intended for review and harness generation, not direct compilation.")
     lines.append(" * Dependency snippets are grouped before function bodies.")
     lines.append(" * Function bodies are ordered with callees before callers when resolvable.")
+    lines.append(" * Duplicate definitions are emitted once by symbol kind and name.")
     lines.append(" */")
     lines.append("")
-    append_bundle_group(lines, "Constants and macros", deps["constants"])
-    append_bundle_group(lines, "Typedefs", deps["typedefs"])
-    append_bundle_group(lines, "Enums and enumerators", deps["enums"])
-    append_bundle_group(lines, "Global variables", deps["global_variables"])
-    append_bundle_group(lines, "Static variables", deps["static_variables"])
-    append_bundle_group(lines, "Structures and unions", deps["structures"])
+    seen_definitions: set[tuple[str, str]] = set()
+    append_bundle_group(lines, "Constants and macros", deps["constants"], seen_definitions)
+    append_bundle_group(lines, "Typedefs", deps["typedefs"], seen_definitions)
+    append_bundle_group(lines, "Enums and enumerators", deps["enums"], seen_definitions)
+    append_bundle_group(lines, "Global variables", deps["global_variables"], seen_definitions)
+    append_bundle_group(lines, "Static variables", deps["static_variables"], seen_definitions)
+    append_bundle_group(lines, "Structures and unions", deps["structures"], seen_definitions)
     append_skipped_auxiliary_group(lines, report.get("skipped_auxiliary_calls", []))
     lines.append("/* ===== Function sources: callees before callers ===== */")
     if not functions:
         lines.append("/* not found */")
         lines.append("")
         return "\n".join(lines)
-    for idx, function_report in enumerate(functions, start=1):
+    seen_function_names: set[str] = set()
+    function_index = 0
+    for function_report in functions:
         item = function_report["item"]
+        function_name = str(item.get("name", ""))
+        if function_name in seen_function_names:
+            continue
+        seen_function_names.add(function_name)
+        function_index += 1
         lines.append(
-            f"/* [{idx}] {item['name']} - {item['file']}:{item['start_line']}-{item['end_line']} */"
+            f"/* [{function_index}] {item['name']} - {item['file']}:{item['start_line']}-{item['end_line']} */"
         )
         lines.append(str(function_report["source"]).rstrip())
         lines.append("")
@@ -156,18 +165,29 @@ def sort_bundle_items_by_references(items: list[dict[str, object]]) -> list[dict
     return result
 
 
-def append_bundle_group(lines: list[str], title: str, items: list[dict[str, object]]) -> None:
+def append_bundle_group(
+    lines: list[str],
+    title: str,
+    items: list[dict[str, object]],
+    seen_definitions: set[tuple[str, str]] | None = None,
+) -> None:
     lines.append(f"/* ===== {title} ===== */")
     if not items:
         lines.append("/* not found */")
         lines.append("")
         return
     seen: set[tuple[str, str, int]] = set()
+    emitted = False
     for item in sort_bundle_items_by_references(items):
         key = (str(item["file"]), str(item["name"]), int(item["start_line"]))
         if key in seen:
             continue
         seen.add(key)
+        definition_key = bundle_definition_key(item)
+        if seen_definitions is not None and definition_key in seen_definitions:
+            continue
+        if seen_definitions is not None:
+            seen_definitions.add(definition_key)
         lines.append(
             f"/* {item['kind']} {item['name']} - {item['file']}:{item['start_line']} */"
         )
@@ -177,6 +197,25 @@ def append_bundle_group(lines: list[str], title: str, items: list[dict[str, obje
         else:
             lines.append("/* source snippet unavailable */")
         lines.append("")
+        emitted = True
+    if not emitted:
+        lines.append("/* duplicate definitions omitted */")
+        lines.append("")
+
+
+def bundle_definition_key(item: dict[str, object]) -> tuple[str, str]:
+    kind = str(item.get("kind", ""))
+    name = str(item.get("name", "")).strip()
+    if kind in {"struct", "union", "enum", "enumerator", "typedef", "macro_define", "variable"}:
+        if name:
+            return (kind, name)
+    snippet = re.sub(r"\s+", " ", str(item.get("snippet", ""))).strip()
+    if snippet:
+        return ("snippet", snippet)
+    return (
+        kind,
+        f"{item.get('file', '')}:{item.get('start_line', '')}:{item.get('end_line', '')}",
+    )
 
 
 def print_call_sequence(report: dict[str, object]) -> None:

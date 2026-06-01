@@ -170,6 +170,8 @@ python .\src\cpp_meta_query.py calls parse_config --db .\my_project\.vscode\BROW
 `Skipped auxiliary callees` 段落中记录跳过项。
 同时会排除 `test`、`tests`、`testing`、`selftests`、`DT`、`ST` 等测试目录下的符号索引，
 避免测试代码中的同名符号混入下游函数分析包后造成重定义。
+最终 `.c` 输出还会按符号类别和名称去重；多个子函数共享同一个宏、typedef、枚举、
+全局变量、静态变量、结构体或函数实现时，只保留一份定义。
 
 ### 3. calls
 

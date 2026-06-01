@@ -118,8 +118,6 @@ def classify_dependencies(
             groups["typedefs"].append(item)
         elif item.kind in ("enum", "enumerator"):
             groups["enums"].append(item)
-            if item.kind == "enumerator":
-                groups["constants"].append(item)
         elif item.kind == "macro_define":
             groups["constants"].append(item)
         elif item.kind == "variable":

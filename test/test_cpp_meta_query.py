@@ -16,6 +16,7 @@ from src.cpp_meta_query import (
 from src.cpp_meta.base import QueryOptions
 from src.cpp_meta.filters import is_test_symbol_path
 from src.cpp_meta.report import ReportCommand
+from src.cpp_meta.renderer import render_subfunction_c_bundle
 
 
 class CppMetaQuerySmokeTest(unittest.TestCase):
@@ -135,6 +136,90 @@ class CppMetaQuerySmokeTest(unittest.TestCase):
         self.assertTrue(is_test_symbol_path(r"F:\repo\DT\case.c"))
         self.assertTrue(is_test_symbol_path(r"F:\repo\ST\case.c"))
         self.assertFalse(is_test_symbol_path(r"F:\repo\src\core\foo.c"))
+
+    def test_subfunction_bundle_renders_duplicate_definitions_once(self) -> None:
+        report = {
+            "selected": {
+                "name": "target",
+                "file": "src/main.c",
+                "start_line": 10,
+                "end_line": 20,
+            },
+            "limits": {
+                "max_depth": 1,
+                "max_functions": 10,
+                "max_nesting_depth": 4,
+                "include_auxiliary": False,
+                "exclude_test_symbols": True,
+            },
+            "skipped_auxiliary_calls": [],
+            "dependencies": {
+                "constants": [
+                    {
+                        "id": 1,
+                        "kind": "macro_define",
+                        "name": "FOO",
+                        "file": "include/a.h",
+                        "start_line": 1,
+                        "snippet": "#define FOO 1",
+                    },
+                    {
+                        "id": 2,
+                        "kind": "macro_define",
+                        "name": "FOO",
+                        "file": "include/b.h",
+                        "start_line": 2,
+                        "snippet": "#define FOO 1",
+                    },
+                ],
+                "typedefs": [],
+                "enums": [],
+                "global_variables": [],
+                "static_variables": [],
+                "structures": [
+                    {
+                        "id": 3,
+                        "kind": "struct",
+                        "name": "shared",
+                        "file": "include/a.h",
+                        "start_line": 3,
+                        "snippet": "struct shared { int x; };",
+                    },
+                    {
+                        "id": 4,
+                        "kind": "struct",
+                        "name": "shared",
+                        "file": "include/b.h",
+                        "start_line": 4,
+                        "snippet": "struct shared { int x; };",
+                    },
+                ],
+            },
+            "functions": [
+                {
+                    "item": {
+                        "name": "helper",
+                        "file": "src/a.c",
+                        "start_line": 1,
+                        "end_line": 3,
+                    },
+                    "source": "int helper(void) { return FOO; }",
+                },
+                {
+                    "item": {
+                        "name": "helper",
+                        "file": "src/b.c",
+                        "start_line": 1,
+                        "end_line": 3,
+                    },
+                    "source": "int helper(void) { return FOO; }",
+                },
+            ],
+        }
+        text = render_subfunction_c_bundle(report)
+        self.assertEqual(text.count("#define FOO 1"), 1)
+        self.assertEqual(text.count("struct shared { int x; };"), 1)
+        self.assertEqual(text.count("int helper(void) { return FOO; }"), 1)
 
 
 if __name__ == "__main__":
